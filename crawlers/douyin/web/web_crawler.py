@@ -372,9 +372,9 @@ class DouyinWebCrawler:
         """-------------------------------------------------------handler接口列表-------------------------------------------------------"""
 
         # 获取单一视频信息
-        # aweme_id = "7372484719365098803"
-        # result = await self.fetch_one_video(aweme_id)
-        # print(result)
+        aweme_id = "7372484719365098803"
+        result = await self.fetch_one_video(aweme_id)
+        print(result)
 
         # 获取用户发布作品数据
         # sec_user_id = "MS4wLjABAAAANXSltcLCzDGmdNFI2Q_QixVTr67NiYzjKOIP5s03CAE"

@@ -1,0 +1,30 @@
+# ==============================================================================
+# Copyright (C) 2021 Evil0ctal
+#
+# This file is part of the Douyin_TikTok_Download_API project.
+#
+# This project is licensed under the Apache License 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at:
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+# Token管理配置 (Token Management Configuration)
+TokenManager:
+
+  # 快手配置 (Kuaishou Configuration)
+  kuaishou:
+    headers:
+      Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      Referer: "https://www.kuaishou.com/"
+      Cookie: "weblogger_did=web_56162162693DAF57; _did=web_2265298604449C60; didv=1762006329953; _bl_uid=mRm5hhvhgFvd3h20pqO2vp55U5y4; kpf=PC_WEB; clientid=3; kwpsecproductname=kuaishou-vision; did=web_ee89ef9f4c6314f91fe37368316983cb; apdid=c750a0d6-f658-4c7f-96e3-5512a0da9d321bffb85eb9aa6f58b94128196eb142d4:1764559130:1; _ga_H896PJ54TF=GS2.1.s1764832886$o3$g0$t1764832886$j60$l0$h0; _ga=GA1.2.600136517.1764559183; userId=1431097460; bUserId=1000525547204; kuaishou.server.webday7_st=ChprdWFpc2hvdS5zZXJ2ZXIud2ViZGF5Ny5zdBKwAQd4IvkhRjO9RpIdn2j6a9OmP9OgEI4vL6JebDugHwD157Q9AMzbP7xbc4pQ_shyriYHUDftJho9uXVcpnwuzbfmd6RInzKwu1dU_UsmlPXOGfRZj_nZAvzndOWxhdyFU9wtU2AEh5kE_Dty9F1BjO9M4DI40Ov7g8syjrS8NpEqr2ASUr8mHePL6oSlBanx79S4sBrWEYlREXQYlC_X0dJwVlL8e6NnV8Ldbfwr4WVNGhKquV16S9dezebl5ZuYo_R_JKgiIIm3n7iv-Pza5oViZjeRx91ONkusFxTQ1QgI_WdCnu3SKAUwAQ; kuaishou.server.webday7_ph=ef4c80190d07553926e4ca95a6bb9935cf52; ktrace-context=1|MS44Nzg0NzI0NTc4Nzk2ODY5Ljc2NjUzMjg0LjE3NjgwMzQ1MDMwMzcuMTU4NTIzOTg=|MS44Nzg0NzI0NTc4Nzk2ODY5LjgzOTMzNjQzLjE3NjgwMzQ1MDMwMzcuMTU4NTIzOTk=|0|webservice-user-growth-node|webservice|true|src-Js; kpn=KUAISHOU_VISION; kwpsecproductname=kuaishou-vision; kwfv1=PnGU+9+Y8008S+nH0U+0mjPf8fP08f+98f+nLlwnrIP9+Sw/ZFGfzY+eGlGf+f+e4SGfbYP0QfGnLFwBLU80mYG98DGfHI+n8SweWU8emY+APE+0LIPAc7PBL9wBPl+/H9P9rIPAHAPAHFP/LEG/rEwBQjwnHF8BcEPer98ncE+Ac7+9PEPASjP9PU8ePUP0pD+Ab0G08Y+nr9+/+fPAD9wc==; kwssectoken=C/Cqj8oA+dn+xEcJDSgfJqfCHa4WiiBkHX1OUvy3aDSx3eX0cLAoLZAm0EBKF5Kok2Xj52bvB2VxmzrMyVZRSA==; kwscode=354b5936cfd5c804230b90d77cc8c055f465a21f420b2a616f6e96fcf718f5a0"
+    proxies:
+      http: ""
+      https: ""

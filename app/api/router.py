@@ -5,6 +5,7 @@ from app.api.endpoints import (
     douyin_web,
     bilibili_web,
     hybrid_parsing, ios_shortcut, download,
+    weibo_web, pipixia_web, kuaishou_web,
 )
 
 router = APIRouter()
@@ -18,6 +19,15 @@ router.include_router(douyin_web.router, prefix="/douyin/web", tags=["Douyin-Web
 
 # Bilibili routers
 router.include_router(bilibili_web.router, prefix="/bilibili/web", tags=["Bilibili-Web-API"])
+
+# Weibo routers
+router.include_router(weibo_web.router, prefix="/weibo/web", tags=["Weibo-Web-API"])
+
+# Pipixia routers
+router.include_router(pipixia_web.router, prefix="/pipixia/web", tags=["Pipixia-Web-API"])
+
+# KuaiShou routers
+router.include_router(kuaishou_web.router, prefix="/kuaishou/web", tags=["KuaiShou-Web-API"])
 
 # Hybrid routers
 router.include_router(hybrid_parsing.router, prefix="/hybrid", tags=["Hybrid-API"])
