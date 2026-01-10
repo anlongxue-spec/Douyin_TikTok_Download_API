@@ -4,7 +4,7 @@ from app.api.endpoints import (
     tiktok_app,
     douyin_web,
     bilibili_web,
-    hybrid_parsing, ios_shortcut, download,
+    hybrid_parsing, ios_shortcut, download, video_proxy,
     weibo_web, pipixia_web, kuaishou_web,
 )
 
@@ -37,3 +37,6 @@ router.include_router(ios_shortcut.router, prefix="/ios", tags=["iOS-Shortcut"])
 
 # Download routers
 router.include_router(download.router, tags=["Download"])
+
+# Video Proxy routers
+router.include_router(video_proxy.router, tags=["Video-Proxy"])

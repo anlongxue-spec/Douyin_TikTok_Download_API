@@ -58,6 +58,20 @@ class XiaoHongShuWebCrawler:
             dict: 包含headers和proxies的字典
         """
         xiaohongshu_config = config["TokenManager"]["xiaohongshu"]
+        
+        # 处理代理配置
+        proxies = xiaohongshu_config["proxies"]
+        http_proxy = proxies["http"]
+        https_proxy = proxies["https"]
+        
+        # 如果代理值为空，则不使用代理
+        proxy_dict = None
+        if http_proxy or https_proxy:
+            proxy_dict = {
+                "http://": http_proxy,
+                "https://": https_proxy
+            }
+        
         kwargs = {
             "headers": {
                 "Accept-Language": xiaohongshu_config["headers"]["Accept-Language"],
@@ -67,7 +81,7 @@ class XiaoHongShuWebCrawler:
                 "Content-Type": "application/json",
                 "Origin": "https://www.xiaohongshu.com"
             },
-            "proxies": {"http://": xiaohongshu_config["proxies"]["http"], "https://": xiaohongshu_config["proxies"]["https"]},
+            "proxies": proxy_dict,
         }
         return kwargs
 
@@ -224,6 +238,15 @@ class XiaoHongShuWebCrawler:
         Returns:
             dict: 笔记数据
         """
+        import httpx
+        
+        # 处理短链接重定向
+        if "xhslink.com" in url:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url)
+                url = str(response.url)
+                print(f"短链接重定向后的URL: {url}")
+        
         # 标准化URL
         url = URLUtils.normalize_url(url)
         

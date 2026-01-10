@@ -34,11 +34,21 @@ class PhotoIdFetcher:
         Returns:
             str: 提取到的photoId
         """
-        # 匹配快手视频URL的正则表达式
-        pattern = r"short-video/([a-zA-Z0-9]+)"
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
+        # 定义多种快手视频URL格式的正则表达式
+        patterns = [
+            # 标准网页版格式
+            r"short-video/([a-zA-Z0-9]+)",
+            # 移动端格式
+            r"fw/photo/([a-zA-Z0-9]+)",
+            # 从URL参数中提取
+            r"photoId=([a-zA-Z0-9]+)"
+        ]
+
+        # 遍历所有正则表达式
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
         return ""
 
 
@@ -65,6 +75,71 @@ class UserIdFetcher:
         return ""
 
 
+class URLUtils:
+    """URL工具类 (URL Utilities)"""
+
+    @staticmethod
+    def normalize_url(url: str) -> str:
+        """
+        标准化URL
+        Normalize URL
+        
+        Args:
+            url (str): 原始URL
+            
+        Returns:
+            str: 标准化后的URL
+        """
+        # 移除URL末尾的斜杠
+        url = url.rstrip("/")
+        return url
+
+    @staticmethod
+    def is_short_url(url: str) -> bool:
+        """
+        检查URL是否为快手短链接
+        Check if URL is a KuaiShou short URL
+        
+        Args:
+            url (str): URL
+            
+        Returns:
+            bool: 如果是短链接则返回True，否则返回False
+        """
+        short_url_patterns = [
+            r"^https?://v\.kuaishou\.com/[a-zA-Z0-9]+$",
+            r"^https?://c\.kuaishou\.com/[a-zA-Z0-9]+$"
+        ]
+        
+        for pattern in short_url_patterns:
+            if re.match(pattern, url):
+                return True
+        return False
+
+    @staticmethod
+    def extract_short_url_code(url: str) -> str:
+        """
+        从快手短链接中提取短码
+        Extract short code from KuaiShou short URL
+        
+        Args:
+            url (str): 快手短链接
+            
+        Returns:
+            str: 提取到的短码
+        """
+        patterns = [
+            r"https?://v\.kuaishou\.com/([a-zA-Z0-9]+)",
+            r"https?://c\.kuaishou\.com/([a-zA-Z0-9]+)"
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return ""
+
+
 class GraphQLQueryBuilder:
     """GraphQL查询构建器 (GraphQL Query Builder)"""
     
@@ -80,9 +155,10 @@ class GraphQLQueryBuilder:
         Returns:
             str: GraphQL查询字符串
         """
-        return f"""
-        query videoDetail($photoId: String, $type: String, $page: Int, $webPageArea: String) {
-          visionVideoDetail(photoId: $photoId, type: $type, page: $page, webPageArea: $webPageArea) {
+        # 使用普通字符串而不是f-string，避免花括号转义问题
+        return '''
+        query videoDetail($photoId: String, $type: String, $webPageArea: String) {
+          visionVideoDetail(photoId: $photoId, type: $type, webPageArea: $webPageArea) {
             status
             type
             author {
@@ -90,26 +166,20 @@ class GraphQLQueryBuilder:
               name
               headerUrl
               following
-              follower
             }
             photo {
               id
               duration
               caption
               likeCount
-              playCount
-              commentCount
-              shareCount
+              viewCount
               timestamp
               coverUrl
-              mainUrl
-              tags {
-                name
-              }
+              photoUrl
             }
           }
         }
-        """
+        '''
     
     @staticmethod
     def build_user_profile_query(user_id: str) -> str:
@@ -123,7 +193,7 @@ class GraphQLQueryBuilder:
         Returns:
             str: GraphQL查询字符串
         """
-        return f"""
+        return '''
         query userProfile($userId: String, $pcursor: String, $page: Int, $webPageArea: String) {
           visionProfile(userId: $userId, pcursor: $pcursor, page: $page, webPageArea: $webPageArea) {
             status
@@ -140,7 +210,7 @@ class GraphQLQueryBuilder:
             }
           }
         }
-        """
+        '''
     
     @staticmethod
     def build_user_works_query() -> str:
@@ -151,7 +221,7 @@ class GraphQLQueryBuilder:
         Returns:
             str: GraphQL查询字符串
         """
-        return f"""
+        return '''
         query visionProfilePhotoList($userId: String, $pcursor: String, $page: Int, $webPageArea: String) {
           visionProfilePhotoList(userId: $userId, pcursor: $pcursor, page: $page, webPageArea: $webPageArea) {
             result
@@ -175,7 +245,7 @@ class GraphQLQueryBuilder:
             }
           }
         }
-        """
+        '''
     
     @staticmethod
     def build_user_likes_query() -> str:
@@ -186,7 +256,7 @@ class GraphQLQueryBuilder:
         Returns:
             str: GraphQL查询字符串
         """
-        return f"""
+        return '''
         query visionProfileLikedPhotoList($userId: String, $pcursor: String, $page: Int, $webPageArea: String) {
           visionProfileLikedPhotoList(userId: $userId, pcursor: $pcursor, page: $page, webPageArea: $webPageArea) {
             result
@@ -210,4 +280,4 @@ class GraphQLQueryBuilder:
             }
           }
         }
-        """
+        '''

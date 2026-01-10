@@ -19,6 +19,7 @@
 import asyncio  # 异步I/O
 import os  # 系统操作
 import yaml  # 配置文件
+import httpx  # HTTP客户端
 
 # 基础爬虫客户端和快手API端点
 from crawlers.base_crawler import BaseCrawler
@@ -32,6 +33,7 @@ from crawlers.kuaishou.web.models import (
 from crawlers.kuaishou.web.utils import (
     PhotoIdFetcher,  # 视频ID获取
     UserIdFetcher,  # 用户ID获取
+    URLUtils,  # URL工具类
     GraphQLQueryBuilder  # GraphQL查询构建器
 )
 
@@ -56,6 +58,20 @@ class KuaiShouWebCrawler:
             dict: 包含headers和proxies的字典
         """
         kuaishou_config = config["TokenManager"]["kuaishou"]
+        
+        # 处理代理配置
+        proxies = kuaishou_config["proxies"]
+        http_proxy = proxies["http"]
+        https_proxy = proxies["https"]
+        
+        # 如果代理值为空，则不使用代理
+        proxy_dict = None
+        if http_proxy or https_proxy:
+            proxy_dict = {
+                "http://": http_proxy,
+                "https://": https_proxy
+            }
+        
         kwargs = {
             "headers": {
                 "Accept-Language": kuaishou_config["headers"]["Accept-Language"],
@@ -65,7 +81,7 @@ class KuaiShouWebCrawler:
                 "Content-Type": "application/json",
                 "Origin": "https://www.kuaishou.com"
             },
-            "proxies": {"http://": kuaishou_config["proxies"]["http"], "https://": kuaishou_config["proxies"]["https"]},
+            "proxies": proxy_dict,
         }
         return kwargs
 
@@ -91,7 +107,6 @@ class KuaiShouWebCrawler:
             variables = {
                 "photoId": photo_id,
                 "type": "play",
-                "page": 1,
                 "webPageArea": ""
             }
             
@@ -102,9 +117,19 @@ class KuaiShouWebCrawler:
                 "query": query
             }
             
+            print(f"\n发送GraphQL请求:")
+            print(f"URL: {KuaiShouAPIEndpoints.API_BASE_URL}")
+            print(f"Headers: {kwargs['headers']}")
+            print(f"请求数据: {data}")
+            
             # 发送请求
-            response = await crawler.fetch_post_json(KuaiShouAPIEndpoints.API_BASE_URL, data=data)
-        return response
+            try:
+                response = await crawler.fetch_post_json(KuaiShouAPIEndpoints.API_BASE_URL, data=data)
+                print(f"响应数据: {response}")
+                return response
+            except Exception as e:
+                print(f"请求失败: {type(e).__name__}: {e}")
+                raise
 
     # 获取用户资料
     async def fetch_user_profile(self, user_id: str):
@@ -233,8 +258,20 @@ class KuaiShouWebCrawler:
         Returns:
             dict: 视频数据
         """
-        # 从URL中提取视频ID
-        photo_id = PhotoIdFetcher.extract_photo_id_from_url(url)
+        # 标准化URL
+        url = URLUtils.normalize_url(url)
+        
+        # 检查是否为短链接
+        if URLUtils.is_short_url(url):
+            # 使用httpx获取短链接的完整URL
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url)
+                full_url = str(response.url)
+        else:
+            full_url = url
+        
+        # 从完整URL中提取视频ID
+        photo_id = PhotoIdFetcher.extract_photo_id_from_url(full_url)
         if not photo_id:
             raise ValueError("无法从URL中提取视频ID")
         

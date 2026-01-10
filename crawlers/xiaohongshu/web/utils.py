@@ -36,6 +36,7 @@ class NoteIdFetcher:
         """
         # 匹配小红书笔记URL的正则表达式
         patterns = [
+            r"discovery/item/([a-zA-Z0-9-]+)",  # 新格式
             r"explore/([a-zA-Z0-9-]+)",  # 标准格式
             r"note/([a-zA-Z0-9-]+)",  # 另一种格式
             r"([a-zA-Z0-9-]{32})"  # 直接匹配32位字符的note_id

@@ -112,7 +112,7 @@ class URLUtils:
             str: 标准化后的URL
         """
         # 移除URL中的多余参数
-        url = re.sub(r"(&_t=\d+")|(&_t=\d+)|(_t=\d+)", "", url)
+        url = re.sub(r"_t=\d+", "", url)
         # 移除URL末尾的斜杠
         url = url.rstrip("/")
         # 将短链接转换为标准链接

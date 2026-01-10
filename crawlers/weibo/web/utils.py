@@ -19,6 +19,9 @@
 import re
 from typing import Optional, Dict, Any
 
+# 导入项目日志记录器
+from crawlers.utils.logger import logger
+
 
 class WeiBoIdFetcher:
     """微博ID获取器 (WeiBo ID Fetcher)"""
@@ -113,7 +116,7 @@ class URLUtils:
             str: 标准化后的URL
         """
         # 移除URL中的多余参数
-        url = re.sub(r"(&_t=\d+")|(&_t=\d+)|(_t=\d+)", "", url)
+        url = re.sub(r"_t=\d+", "", url)
         # 移除URL末尾的斜杠
         url = url.rstrip("/")
         return url
@@ -174,7 +177,7 @@ class DataParser:
                 if "stream_url" in video:
                     video_urls["sd"] = video["stream_url"]
         except Exception as e:
-            print(f"提取视频URL时出错: {e}")
+            logger.error(f"提取视频URL时出错: {e}")
 
         return video_urls
 
@@ -193,22 +196,17 @@ class DataParser:
         images = []
 
         try:
-            # 检查是否包含图片数据
-            if "pics" in data:
-                for pic in data["pics"]:
-                    if "large" in pic:
-                        images.append(pic["large"]["url"])
-                    else:
-                        images.append(pic["url"])
-            # 检查是否包含page_info
-            elif "page_info" in data and "pics" in data["page_info"]:
-                for pic in data["page_info"]["pics"]:
+            # 尝试从不同位置获取图片数据
+            pics = data.get("pics") or data.get("page_info", {}).get("pics")
+            
+            if pics:
+                for pic in pics:
                     if "large" in pic:
                         images.append(pic["large"]["url"])
                     else:
                         images.append(pic["url"])
         except Exception as e:
-            print(f"提取图片URL时出错: {e}")
+            logger.error(f"提取图片URL时出错: {e}")
 
         return images
 
@@ -247,7 +245,7 @@ class DataParser:
                     "created_at": user.get("created_at"),
                 }
         except Exception as e:
-            print(f"解析用户数据时出错: {e}")
+            logger.error(f"解析用户数据时出错: {e}")
 
         return user_info
 
@@ -286,6 +284,6 @@ class DataParser:
             video_info["images"] = DataParser.extract_images(data)
 
         except Exception as e:
-            print(f"解析视频数据时出错: {e}")
+            logger.error(f"解析视频数据时出错: {e}")
 
         return video_info

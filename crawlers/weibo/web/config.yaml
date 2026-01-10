@@ -27,7 +27,7 @@ TokenManager:
       Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
       User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       Referer: "https://weibo.com/"
-      Cookie: ""
+      Cookie: "PC_TOKEN=be6f116577; SCF=AhBelka24umlCJom0r_JC17TLSeGvvA_6T0GbWFy0mRL9P2fawOdkrRZidTS5KvhPHvtN3Tx4ty5YgRCK5o8kIs.; SUB=_2A25EZgsYDeRhGeRL6lAW9i7EyjmIHXVnGgLQrDV8PUNbmtB-LUHxkW9NUzexOXj27VVhz0YIY04lWABazEs3q2sv; SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9Wh-odQEhR9sWAWXfpAb0-aQ5NHD95QESK2ES0q71h2fWs4DqcjMi--NiK.Xi-2Ri--ciKnRi-zN9J7c1PDLIPUR1Btt; ALF=02_1770653768"
     # 代理配置
     proxies:
       http: ""

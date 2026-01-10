@@ -123,14 +123,19 @@ def parse_video():
         # 创建一个视频/图集的公有变量
         url_type = ViewsUtils.t('视频', 'Video') if data.get('type') == 'video' else ViewsUtils.t('图片', 'Image')
         platform = data.get('platform')
+        # 动态获取字段名，适配不同平台
+        video_id = data.get('video_id') or data.get('aweme_id')
+        author_name = data.get('author_name') or data.get('author', {}).get('name') or data.get('author', {}).get('nickname')
+        author_id = data.get('author_id') or data.get('author', {}).get('id') or data.get('author', {}).get('unique_id')
+        
         table_list = [
             [ViewsUtils.t('类型', 'type'), ViewsUtils.t('内容', 'content')],
             [ViewsUtils.t('解析类型', 'Type'), url_type],
             [ViewsUtils.t('平台', 'Platform'), platform],
-            [f'{url_type} ID', data.get('aweme_id')],
+            [f'{url_type} ID', video_id],
             [ViewsUtils.t(f'{url_type}描述', 'Description'), data.get('desc')],
-            [ViewsUtils.t('作者昵称', 'Author nickname'), data.get('author').get('nickname')],
-            [ViewsUtils.t('作者ID', 'Author ID'), data.get('author').get('unique_id')],
+            [ViewsUtils.t('作者昵称', 'Author nickname'), author_name],
+            [ViewsUtils.t('作者ID', 'Author ID'), author_id],
             [ViewsUtils.t('API链接', 'API URL'),
              put_link(
                  ViewsUtils.t('点击查看', 'Click to view'),
@@ -148,12 +153,21 @@ def parse_video():
             wm_video_url_HQ = data.get('video_data').get('wm_video_url_HQ')
             nwm_video_url_HQ = data.get('video_data').get('nwm_video_url_HQ')
             if wm_video_url_HQ and nwm_video_url_HQ:
-                table_list.insert(4, [ViewsUtils.t('视频链接-水印', 'Video URL-Watermark'),
-                                      put_link(ViewsUtils.t('点击查看', 'Click to view'),
-                                               wm_video_url_HQ, new_window=True)])
-                table_list.insert(5, [ViewsUtils.t('视频链接-无水印', 'Video URL-No Watermark'),
-                                      put_link(ViewsUtils.t('点击查看', 'Click to view'),
-                                               nwm_video_url_HQ, new_window=True)])
+                # 对于微博视频，使用代理链接
+                if platform == 'weibo':
+                    table_list.insert(4, [ViewsUtils.t('视频链接-水印', 'Video URL-Watermark'),
+                                          put_link(ViewsUtils.t('点击查看', 'Click to view'),
+                                                   f"/api/video_proxy?video_url={wm_video_url_HQ}&platform={platform}", new_window=True)])
+                    table_list.insert(5, [ViewsUtils.t('视频链接-无水印', 'Video URL-No Watermark'),
+                                          put_link(ViewsUtils.t('点击查看', 'Click to view'),
+                                                   f"/api/video_proxy?video_url={nwm_video_url_HQ}&platform={platform}", new_window=True)])
+                else:
+                    table_list.insert(4, [ViewsUtils.t('视频链接-水印', 'Video URL-Watermark'),
+                                          put_link(ViewsUtils.t('点击查看', 'Click to view'),
+                                                   wm_video_url_HQ, new_window=True)])
+                    table_list.insert(5, [ViewsUtils.t('视频链接-无水印', 'Video URL-No Watermark'),
+                                          put_link(ViewsUtils.t('点击查看', 'Click to view'),
+                                                   nwm_video_url_HQ, new_window=True)])
             table_list.insert(6, [ViewsUtils.t('视频下载-水印', 'Video Download-Watermark'),
                                   put_link(ViewsUtils.t('点击下载', 'Click to download'),
                                            f"/api/download?url={url}&prefix=true&with_watermark=true",
@@ -162,9 +176,15 @@ def parse_video():
                                   put_link(ViewsUtils.t('点击下载', 'Click to download'),
                                            f"/api/download?url={url}&prefix=true&with_watermark=false",
                                            new_window=True)])
-            # 添加视频信息
-            table_list.insert(0, [
-                put_video(data.get('video_data').get('nwm_video_url_HQ'), poster=None, loop=True, width='50%')])
+            # 添加视频预览（如果有视频URL的话，但微博视频禁用直接预览）
+            video_preview_url = data.get('video_data', {}).get('nwm_video_url_HQ') or data.get('video_data', {}).get('nwm_video_url') or data.get('video_data', {}).get('wm_video_url_HQ') or data.get('video_data', {}).get('wm_video_url')
+            if video_preview_url and platform != 'weibo':  # 微博视频禁用直接预览，避免跨域错误
+                table_list.insert(0, [put_video(video_preview_url, poster=None, loop=True, width='50%')])
+            else:
+                if platform == 'weibo':
+                    table_list.insert(0, [put_html(f"<p style='color: gray;'>{ViewsUtils.t('微博视频暂不支持在线预览，请使用下载功能', 'Weibo videos do not support online preview, please use the download function')}</p>")])
+                else:
+                    table_list.insert(0, [put_html(f"<p style='color: gray;'>{ViewsUtils.t('当前平台API不提供视频直接播放地址', 'Current platform API does not provide direct video playback URL')}</p>")])
         # 如果是图片/If it's image
         elif url_type == ViewsUtils.t('图片', 'Image'):
             # 添加图片下载链接

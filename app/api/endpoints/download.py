@@ -186,12 +186,20 @@ async def download_file_hybrid(request: Request,
                 __headers = await HybridCrawler.TikTokWebCrawler.get_tiktok_headers()
             elif platform == 'bilibili':
                 __headers = await HybridCrawler.BilibiliWebCrawler.get_bilibili_headers()
+            elif platform == 'kuaishou':
+                __headers = await HybridCrawler.KuaiShouWebCrawler.get_kuaishou_headers()
+            elif platform == 'xiaohongshu':
+                __headers = await HybridCrawler.XiaoHongShuWebCrawler.get_xiaohongshu_headers()
+            elif platform == 'weibo':
+                __headers = await HybridCrawler.get_weibo_headers()
             else:  # douyin
                 __headers = await HybridCrawler.DouyinWebCrawler.get_douyin_headers()
 
+            # 获取视频数据
+            video_data = data.get('video_data', {})
+            
             # Bilibili 特殊处理：音视频分离
             if platform == 'bilibili':
-                video_data = data.get('video_data', {})
                 video_url = video_data.get('nwm_video_url_HQ') if not with_watermark else video_data.get('wm_video_url_HQ')
                 audio_url = video_data.get('audio_url')
                 if not video_url or not audio_url:
@@ -207,9 +215,21 @@ async def download_file_hybrid(request: Request,
                         status_code=500,
                         detail="Failed to merge Bilibili video and audio streams"
                     )
+            # 其他平台的常规处理
             else:
-                # 其他平台的常规处理
-                url = data.get('video_data').get('nwm_video_url_HQ') if not with_watermark else data.get('video_data').get('wm_video_url_HQ')
+                # 获取视频URL
+                url = video_data.get('nwm_video_url_HQ') if not with_watermark else video_data.get('wm_video_url_HQ')
+                # 再次检查URL是否为None
+                if not url:
+                    url = video_data.get('nwm_video_url') if not with_watermark else video_data.get('wm_video_url')
+                    
+                if not url:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Failed to get video URL from {platform}"
+                    )
+                    
+                # 下载视频
                 success = await fetch_data_stream(url, request, headers=__headers, file_path=file_path)
                 if not success:
                     raise HTTPException(

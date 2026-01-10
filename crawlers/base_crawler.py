@@ -220,7 +220,8 @@ class BaseCrawler:
 
         Args:
             url (str): 端点URL (Endpoint URL)
-            params (dict): POST请求参数 (POST request parameters)
+            params (dict): URL查询参数 (URL query parameters)
+            data: POST请求体数据 (POST request body data)
 
         Returns:
             response: 响应内容 (Response content)
@@ -229,8 +230,8 @@ class BaseCrawler:
             try:
                 response = await self.aclient.post(
                     url,
-                    json=None if not params else dict(params),
-                    data=None if not data else data,
+                    params=params,  # 作为URL查询参数
+                    json=data,  # GraphQL查询应该作为JSON请求体发送
                     follow_redirects=True
                 )
                 if not response.text.strip() or not response.content:
@@ -333,11 +334,18 @@ class BaseCrawler:
         elif status_code == 429:
             raise APIRateLimitError(f"HTTP Status Code {status_code}")
         else:
-            logger.error("HTTP状态错误: {0}, URL: {1}, 尝试次数: {2}".format(
-                status_code, url, attempt
+            # 获取详细的错误响应内容
+            error_response = ""
+            try:
+                error_response = response.text[:1000]  # 限制长度
+            except:
+                pass
+                
+            logger.error("HTTP状态错误: {0}, URL: {1}, 尝试次数: {2}, 响应: {3}".format(
+                status_code, url, attempt, error_response
             )
             )
-            raise APIResponseError(f"HTTP状态错误: {status_code}")
+            raise APIResponseError(f"HTTP状态错误: {status_code}, 响应: {error_response}")
 
     async def close(self):
         await self.aclient.aclose()
