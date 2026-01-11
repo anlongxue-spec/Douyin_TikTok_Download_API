@@ -17,13 +17,19 @@ HybridCrawler = HybridCrawler()
 
 # 读取上级再上级目录的配置文件
 config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'config.yaml')
+print(f"Reading config from: {config_path}")
+print(f"Config file exists: {os.path.exists(config_path)}")
 with open(config_path, 'r', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 
 async def fetch_data(url: str, headers: dict = None):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    } if headers is None else headers.get('headers')
+    # 处理headers参数，支持直接传递headers字典或包含headers键的字典
+    if headers is None:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+    elif isinstance(headers, dict) and 'headers' in headers:
+        headers = headers['headers']
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()  # 确保响应是成功的
@@ -31,9 +37,13 @@ async def fetch_data(url: str, headers: dict = None):
 
 # 下载视频专用
 async def fetch_data_stream(url: str, request:Request , headers: dict = None, file_path: str = None):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    } if headers is None else headers.get('headers')
+    # 处理headers参数，支持直接传递headers字典或包含headers键的字典
+    if headers is None:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+    elif isinstance(headers, dict) and 'headers' in headers:
+        headers = headers['headers']
     async with httpx.AsyncClient() as client:
         # 启用流式请求
         async with client.stream("GET", url, headers=headers) as response:
@@ -61,18 +71,78 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as audio_temp:
             audio_temp_path = audio_temp.name
         
+        print(f"Created temporary files:")
+        print(f"Video temp path: {video_temp_path}")
+        print(f"Audio temp path: {audio_temp_path}")
+        
         # 下载视频流
-        video_success = await fetch_data_stream(video_url, request, headers=headers, file_path=video_temp_path)
+        print(f"Downloading video stream from: {video_url}")
+        try:
+            video_success = await fetch_data_stream(video_url, request, headers=headers, file_path=video_temp_path)
+            print(f"Video download success: {video_success}")
+        except Exception as e:
+            print(f"Video download failed: {e}")
+            return False
+        
         # 下载音频流
-        audio_success = await fetch_data_stream(audio_url, request, headers=headers, file_path=audio_temp_path)
+        print(f"Downloading audio stream from: {audio_url}")
+        try:
+            audio_success = await fetch_data_stream(audio_url, request, headers=headers, file_path=audio_temp_path)
+            print(f"Audio download success: {audio_success}")
+        except Exception as e:
+            print(f"Audio download failed: {e}")
+            return False
         
         if not video_success or not audio_success:
             print("Failed to download video or audio stream")
             return False
         
+        # 检查下载的文件大小和存在性
+        video_exists = os.path.exists(video_temp_path)
+        audio_exists = os.path.exists(audio_temp_path)
+        video_size = os.path.getsize(video_temp_path) if video_exists else 0
+        audio_size = os.path.getsize(audio_temp_path) if audio_exists else 0
+        print(f"Video file exists: {video_exists}, size: {video_size} bytes")
+        print(f"Audio file exists: {audio_exists}, size: {audio_size} bytes")
+        
+        if not video_exists or video_size == 0:
+            print("Video file is empty or doesn't exist")
+            return False
+        if not audio_exists or audio_size == 0:
+            print("Audio file is empty or doesn't exist")
+            return False
+        
+        # 尝试多种方式获取FFmpeg路径
+        try:
+            # 方法1: 使用配置文件中的路径
+            ffmpeg_path = config.get('API').get('FFmpeg_Path')
+            print(f"Option 1 - FFmpeg path from config: {ffmpeg_path}")
+            
+            # 方法2: 如果配置文件路径不可用，使用硬编码路径
+            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+                ffmpeg_path = r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe"
+                print(f"Option 2 - Using hardcoded FFmpeg path: {ffmpeg_path}")
+            
+            # 验证路径
+            if not os.path.exists(ffmpeg_path):
+                print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
+                return False
+            
+            if not os.path.isfile(ffmpeg_path):
+                print(f"ERROR: FFmpeg path is not a file: {ffmpeg_path}")
+                return False
+            
+            print(f"Final FFmpeg path: {ffmpeg_path}")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to determine FFmpeg path: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        
         # 使用 FFmpeg 合并视频和音频
         ffmpeg_cmd = [
-            'ffmpeg', '-y',  # -y 覆盖输出文件
+            ffmpeg_path, '-y',  # -y 覆盖输出文件
             '-i', video_temp_path,  # 视频输入
             '-i', audio_temp_path,  # 音频输入
             '-c:v', 'copy',  # 复制视频编码，不重新编码
@@ -81,31 +151,51 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             output_path
         ]
         
-        print(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-        print(f"FFmpeg return code: {result.returncode}")
-        if result.stderr:
-            print(f"FFmpeg stderr: {result.stderr}")
-        if result.stdout:
-            print(f"FFmpeg stdout: {result.stdout}")
+        print(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
+        try:
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=300)
+            print(f"FFmpeg return code: {result.returncode}")
+            if result.stdout:
+                print(f"FFmpeg stdout: {result.stdout}")
+            if result.stderr:
+                print(f"FFmpeg stderr: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            print("FFmpeg command timed out")
+            return False
+        except Exception as e:
+            print(f"Failed to execute FFmpeg command: {e}")
+            return False
+        
+        # 检查输出文件
+        output_exists = os.path.exists(output_path)
+        output_size = os.path.getsize(output_path) if output_exists else 0
+        print(f"Output file exists: {output_exists}, size: {output_size} bytes")
         
         # 清理临时文件
         try:
-            os.unlink(video_temp_path)
-            os.unlink(audio_temp_path)
-        except:
-            pass
+            if os.path.exists(video_temp_path):
+                os.unlink(video_temp_path)
+            if os.path.exists(audio_temp_path):
+                os.unlink(audio_temp_path)
+            print("Temporary files cleaned up")
+        except Exception as e:
+            print(f"Failed to clean up temporary files: {e}")
         
-        return result.returncode == 0
+        return result.returncode == 0 and output_exists and output_size > 0
         
     except Exception as e:
         # 清理临时文件
         try:
-            os.unlink(video_temp_path)
-            os.unlink(audio_temp_path)
+            if 'video_temp_path' in locals() and os.path.exists(video_temp_path):
+                os.unlink(video_temp_path)
+            if 'audio_temp_path' in locals() and os.path.exists(audio_temp_path):
+                os.unlink(audio_temp_path)
+            print("Temporary files cleaned up in exception handler")
         except:
             pass
         print(f"Error merging video and audio: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 @router.get("/download", summary="在线下载抖音|TikTok|Bilibili视频/图片/Online download Douyin|TikTok|Bilibili video/image")
@@ -200,17 +290,44 @@ async def download_file_hybrid(request: Request,
             
             # Bilibili 特殊处理：音视频分离
             if platform == 'bilibili':
+                print(f"Debug: Processing Bilibili video with data: {data}")
+                print(f"Debug: Video data: {video_data}")
                 video_url = video_data.get('nwm_video_url_HQ') if not with_watermark else video_data.get('wm_video_url_HQ')
                 audio_url = video_data.get('audio_url')
-                if not video_url or not audio_url:
+                print(f"Debug: Bilibili video URL (no watermark): {video_url}")
+                print(f"Debug: Bilibili audio URL: {audio_url}")
+                if not video_url:
+                    print(f"Debug: nwm_video_url_HQ not found, trying nwm_video_url")
+                    video_url = video_data.get('nwm_video_url') if not with_watermark else video_data.get('wm_video_url')
+                    print(f"Debug: Using fallback video URL: {video_url}")
+                if not audio_url:
+                    print(f"Debug: audio_url not found in video_data")
                     raise HTTPException(
                         status_code=500,
-                        detail="Failed to get video or audio URL from Bilibili"
+                        detail="Failed to get audio URL from Bilibili"
+                    )
+                if not video_url:
+                    print(f"Debug: video_url still not found after fallback")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to get video URL from Bilibili"
                     )
                 
                 # 使用专门的函数合并音视频
-                success = await merge_bilibili_video_audio(video_url, audio_url, request, file_path, __headers.get('headers'))
+                print(f"Debug: Calling merge_bilibili_video_audio with video_url: {video_url}, audio_url: {audio_url}")
+                print(f"Debug: Using headers: {__headers.get('headers')}")
+                print(f"Debug: Output path: {file_path}")
+                print(f"Debug: FFmpeg path from config: {config.get('API').get('FFmpeg_Path')}")
+                try:
+                    success = await merge_bilibili_video_audio(video_url, audio_url, request, file_path, __headers.get('headers'))
+                    print(f"Debug: merge_bilibili_video_audio returned: {success}")
+                except Exception as e:
+                    print(f"Debug: Exception in merge_bilibili_video_audio: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    success = False
                 if not success:
+                    print(f"Debug: Raising HTTPException because merge failed")
                     raise HTTPException(
                         status_code=500,
                         detail="Failed to merge Bilibili video and audio streams"

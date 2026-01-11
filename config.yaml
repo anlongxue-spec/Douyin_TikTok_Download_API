@@ -40,6 +40,7 @@ API:
   # File Configuration
   Download_Path: "./download"    # Default download directory | 默认下载目录
   Download_File_Prefix: "douyin.wtf_"    # Default download file prefix | 默认下载文件前缀
+  FFmpeg_Path: "C:\\Program Files (x86)\\iflyrecClient\\resources\\tj_B1\\node_modules\\@ffmpeg-installer\\win32-x64\\ffmpeg.exe"    # FFmpeg executable path | FFmpeg可执行文件路径
 
 
 # iOS Shortcut
