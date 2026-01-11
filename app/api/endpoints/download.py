@@ -166,14 +166,29 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             ffmpeg_path = config.get('API').get('FFmpeg_Path')
             print(f"Option 1 - FFmpeg path from config: {ffmpeg_path}")
             
-            # 方法2: 如果配置文件路径不可用，使用硬编码路径
+            # 方法2: 如果配置文件路径不可用，使用系统命令查找
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
-                ffmpeg_path = r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe"
-                print(f"Option 2 - Using hardcoded FFmpeg path: {ffmpeg_path}")
+                print(f"Option 2 - Trying to find FFmpeg in system PATH")
+                import shutil
+                ffmpeg_path = shutil.which("ffmpeg")
+                if ffmpeg_path:
+                    print(f"Found FFmpeg in PATH: {ffmpeg_path}")
+            
+            # 方法3: 如果仍未找到，尝试硬编码路径（跨平台）
+            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+                print(f"Option 3 - Trying hardcoded paths based on OS")
+                import platform
+                if platform.system() == "Windows":
+                    ffmpeg_path = r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe"
+                else:
+                    # Linux/macOS路径
+                    ffmpeg_path = "/usr/bin/ffmpeg"
+                print(f"Using hardcoded FFmpeg path: {ffmpeg_path}")
             
             # 验证路径
-            if not os.path.exists(ffmpeg_path):
+            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
+                print(f"Please install FFmpeg or configure the correct path in config.yaml")
                 return False
             
             if not os.path.isfile(ffmpeg_path):
