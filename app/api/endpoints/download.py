@@ -44,21 +44,69 @@ async def fetch_data_stream(url: str, request:Request , headers: dict = None, fi
         }
     elif isinstance(headers, dict) and 'headers' in headers:
         headers = headers['headers']
-    async with httpx.AsyncClient() as client:
-        # 启用流式请求
-        async with client.stream("GET", url, headers=headers) as response:
-            response.raise_for_status()
-
-            # 流式保存文件
-            async with aiofiles.open(file_path, 'wb') as out_file:
-                async for chunk in response.aiter_bytes():
-                    if await request.is_disconnected():
-                        print("客户端断开连接，清理未完成的文件")
-                        await out_file.close()
-                        os.remove(file_path)
-                        return False
-                    await out_file.write(chunk)
-            return True
+    
+    # 设置超时和重试策略
+    httpx_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0),  # 总超时时间
+        follow_redirects=True
+    )
+    
+    async with httpx_client as client:
+        try:
+            # 启用流式请求
+            async with client.stream("GET", url, headers=headers) as response:
+                response.raise_for_status()
+                
+                # 验证响应头
+                if "content-length" in response.headers:
+                    print(f"  Content-Length: {response.headers['content-length']} 字节")
+                
+                # 流式保存文件
+                async with aiofiles.open(file_path, 'wb') as out_file:
+                    total_bytes = 0
+                    async for chunk in response.aiter_bytes():
+                        if await request.is_disconnected():
+                            print("客户端断开连接，清理未完成的文件")
+                            await out_file.close()
+                            os.remove(file_path)
+                            return False
+                        
+                        # 检查chunk是否为空
+                        if not chunk:
+                            continue
+                        
+                        await out_file.write(chunk)
+                        total_bytes += len(chunk)
+                    
+                    # 验证下载的文件大小
+                    if os.path.exists(file_path):
+                        file_size = os.path.getsize(file_path)
+                        print(f"  实际下载大小: {file_size} 字节")
+                        print(f"  预期下载大小: {total_bytes} 字节")
+                        
+                        # 允许一定的误差范围（1024字节），避免网络波动导致的小误差
+                        if abs(file_size - total_bytes) > 1024:
+                            print("  文件下载不完整，清理文件")
+                            try:
+                                os.remove(file_path)
+                            except PermissionError:
+                                print("  无法删除文件，可能被其他程序占用")
+                            return False
+                        else:
+                            print("  文件下载完整")
+                    
+                    return True
+        except httpx.TimeoutException:
+            print(f"  请求超时: {url}")
+            return False
+        except httpx.HTTPStatusError as e:
+            print(f"  HTTP错误: {e.response.status_code} - {e.response.reason_phrase}")
+            return False
+        except Exception as e:
+            print(f"  下载失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Request, output_path: str, headers: dict) -> bool:
     """
@@ -246,7 +294,14 @@ async def download_file_hybrid(request: Request,
 
     # 开始解析数据/Start parsing data
     try:
-        data = await HybridCrawler.hybrid_parsing_single_video(url, minimal=True)
+        # 清理URL，去除多余的空格和反引号
+        import re
+        cleaned_url = url.strip()  # 去除首尾空格
+        cleaned_url = re.sub(r'^`|`$', '', cleaned_url)  # 去除首尾反引号
+        print(f"清理前URL: '{url}'")
+        print(f"清理后URL: '{cleaned_url}'")
+        
+        data = await HybridCrawler.hybrid_parsing_single_video(cleaned_url, minimal=True)
     except Exception as e:
         code = 400
         return ErrorResponseModel(code=code, message=str(e), router=request.url.path, params=dict(request.query_params))

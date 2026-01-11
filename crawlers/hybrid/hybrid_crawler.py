@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # Copyright (C) 2021 Evil0ctal
 #
 # This file is part of the Douyin_TikTok_Download_API project.
@@ -579,15 +579,27 @@ class HybridCrawler:
                     audio_list = dash.get('audio', [])
                     
                     # 选择最高质量的视频流
-                    video_url = video_list[0].get('baseUrl') if video_list else None
-                    audio_url = audio_list[0].get('baseUrl') if audio_list else None
+                    # 按视频分辨率(宽*高)从高到低排序
+                    sorted_video_list = sorted(video_list, 
+                                              key=lambda x: (x.get('width', 0) * x.get('height', 0), x.get('bandwidth', 0)), 
+                                              reverse=True) if video_list else []
+                    
+                    # 按音频带宽从高到低排序
+                    sorted_audio_list = sorted(audio_list, key=lambda x: x.get('bandwidth', 0), reverse=True) if audio_list else []
+                    
+                    # 选择最高质量的视频和音频
+                    video_url = sorted_video_list[0].get('baseUrl') if sorted_video_list else None
+                    audio_url = sorted_audio_list[0].get('baseUrl') if sorted_audio_list else None
+                    
+                    # 选择次高质量的视频作为无水印HQ链接（如果有多个质量）
+                    nwm_video_url_HQ = sorted_video_list[1].get('baseUrl') if len(sorted_video_list) > 1 else video_url
                     
                     api_data = {
                         'video_data': {
-                            'wm_video_url': video_url,
-                            'wm_video_url_HQ': video_url,
-                            'nwm_video_url': video_url,  # Bilibili没有水印概念
-                            'nwm_video_url_HQ': video_url,
+                            'wm_video_url': video_url,  # Bilibili没有水印概念
+                            'wm_video_url_HQ': video_url,  # Bilibili没有水印概念
+                            'nwm_video_url': video_url,  # 无水印链接
+                            'nwm_video_url_HQ': nwm_video_url_HQ,  # 无水印高清链接
                             'audio_url': audio_url,  # Bilibili音视频分离
                             'cid': cid,  # 保存cid供后续使用
                         }
