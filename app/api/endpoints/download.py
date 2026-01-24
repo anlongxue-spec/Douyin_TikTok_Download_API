@@ -43,7 +43,11 @@ async def fetch_data_stream(url: str, request:Request , headers: dict = None, fi
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
     elif isinstance(headers, dict) and 'headers' in headers:
-        headers = headers['headers']
+        # 从包含headers键的字典中提取headers
+        extracted_headers = headers['headers']
+        if isinstance(extracted_headers, dict):
+            headers = extracted_headers
+            print(f"Extracted headers from dict: {list(headers.keys())}")
     
     # 设置超时和重试策略
     httpx_client = httpx.AsyncClient(
