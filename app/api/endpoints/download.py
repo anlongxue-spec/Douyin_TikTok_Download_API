@@ -88,8 +88,8 @@ async def fetch_data_stream(url: str, request:Request , headers: dict = None, fi
                         print(f"  实际下载大小: {file_size} 字节")
                         print(f"  预期下载大小: {total_bytes} 字节")
                         
-                        # 允许一定的误差范围（2048字节），避免网络波动导致的小误差
-                        if abs(file_size - total_bytes) > 2048:
+                        # 允许一定的误差范围（4096字节），避免网络波动导致的小误差
+                        if abs(file_size - total_bytes) > 4096:
                             print(f"  文件下载不完整，清理文件 (预期: {total_bytes} 字节, 实际: {file_size} 字节)")
                             try:
                                 os.remove(file_path)
@@ -127,13 +127,22 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         print(f"Video temp path: {video_temp_path}")
         print(f"Audio temp path: {audio_temp_path}")
         
+        # 清理视频和音频URL中的反引号
+        import re
+        cleaned_video_url = re.sub(r'`', '', video_url)  # 去除视频URL中的反引号
+        cleaned_audio_url = re.sub(r'`', '', audio_url)  # 去除音频URL中的反引号
+        print(f"清理前视频URL: '{video_url}'")
+        print(f"清理后视频URL: '{cleaned_video_url}'")
+        print(f"清理前音频URL: '{audio_url}'")
+        print(f"清理后音频URL: '{cleaned_audio_url}'")
+        
         # 下载视频流（带重试机制）
-        print(f"Downloading video stream from: {video_url}")
+        print(f"Downloading video stream from: {cleaned_video_url}")
         video_success = False
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                video_success = await fetch_data_stream(video_url, request, headers=headers, file_path=video_temp_path)
+                video_success = await fetch_data_stream(cleaned_video_url, request, headers=headers, file_path=video_temp_path)
                 print(f"Video download attempt {attempt+1}/{max_retries} success: {video_success}")
                 if video_success:
                     break
@@ -144,11 +153,11 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     return False
         
         # 下载音频流（带重试机制）
-        print(f"Downloading audio stream from: {audio_url}")
+        print(f"Downloading audio stream from: {cleaned_audio_url}")
         audio_success = False
         for attempt in range(max_retries):
             try:
-                audio_success = await fetch_data_stream(audio_url, request, headers=headers, file_path=audio_temp_path)
+                audio_success = await fetch_data_stream(cleaned_audio_url, request, headers=headers, file_path=audio_temp_path)
                 print(f"Audio download attempt {attempt+1}/{max_retries} success: {audio_success}")
                 if audio_success:
                     break
@@ -183,8 +192,23 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             ffmpeg_path = config.get('API').get('FFmpeg_Path')
             print(f"Option 1 - FFmpeg path from config: {ffmpeg_path}")
             
-            # 方法2: 如果配置文件路径不可用，使用系统命令查找
-            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+            # 方法2: 如果配置文件路径不可用或在当前系统中不存在，使用系统命令查找
+            import platform
+            system = platform.system()
+            config_path_valid = False
+            if ffmpeg_path:
+                # 检查配置路径是否适合当前系统
+                if system == "Windows":
+                    config_path_valid = os.path.exists(ffmpeg_path)
+                else:
+                    # 在Linux/macOS中，Windows路径格式肯定无效
+                    if "C:" in ffmpeg_path or "\\" in ffmpeg_path:
+                        config_path_valid = False
+                        print(f"Config path is Windows format, not valid for {system}")
+                    else:
+                        config_path_valid = os.path.exists(ffmpeg_path)
+            
+            if not config_path_valid:
                 print(f"Option 2 - Trying to find FFmpeg in system PATH")
                 import shutil
                 ffmpeg_path = shutil.which("ffmpeg")
@@ -194,8 +218,6 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             # 方法3: 如果仍未找到，尝试硬编码路径（跨平台）
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
                 print(f"Option 3 - Trying hardcoded paths based on OS")
-                import platform
-                system = platform.system()
                 if system == "Windows":
                     # Windows可能的FFmpeg路径
                     possible_paths = [
@@ -226,7 +248,7 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
                 print(f"Please install FFmpeg or configure the correct path in config.yaml")
-                print(f"System: {platform.system()}")
+                print(f"System: {system}")
                 return False
             
             if not os.path.isfile(ffmpeg_path):
