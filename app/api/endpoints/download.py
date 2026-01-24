@@ -88,16 +88,16 @@ async def fetch_data_stream(url: str, request:Request , headers: dict = None, fi
                         print(f"  实际下载大小: {file_size} 字节")
                         print(f"  预期下载大小: {total_bytes} 字节")
                         
-                        # 允许一定的误差范围（1024字节），避免网络波动导致的小误差
-                        if abs(file_size - total_bytes) > 1024:
-                            print("  文件下载不完整，清理文件")
+                        # 允许一定的误差范围（2048字节），避免网络波动导致的小误差
+                        if abs(file_size - total_bytes) > 2048:
+                            print(f"  文件下载不完整，清理文件 (预期: {total_bytes} 字节, 实际: {file_size} 字节)")
                             try:
                                 os.remove(file_path)
                             except PermissionError:
                                 print("  无法删除文件，可能被其他程序占用")
                             return False
                         else:
-                            print("  文件下载完整")
+                            print(f"  文件下载完整 (预期: {total_bytes} 字节, 实际: {file_size} 字节)")
                     
                     return True
         except httpx.TimeoutException:
@@ -127,26 +127,39 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         print(f"Video temp path: {video_temp_path}")
         print(f"Audio temp path: {audio_temp_path}")
         
-        # 下载视频流
+        # 下载视频流（带重试机制）
         print(f"Downloading video stream from: {video_url}")
-        try:
-            video_success = await fetch_data_stream(video_url, request, headers=headers, file_path=video_temp_path)
-            print(f"Video download success: {video_success}")
-        except Exception as e:
-            print(f"Video download failed: {e}")
-            return False
+        video_success = False
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                video_success = await fetch_data_stream(video_url, request, headers=headers, file_path=video_temp_path)
+                print(f"Video download attempt {attempt+1}/{max_retries} success: {video_success}")
+                if video_success:
+                    break
+                print(f"Retrying video download... ({attempt+1}/{max_retries})")
+            except Exception as e:
+                print(f"Video download attempt {attempt+1}/{max_retries} failed: {e}")
+                if attempt == max_retries - 1:
+                    return False
         
-        # 下载音频流
+        # 下载音频流（带重试机制）
         print(f"Downloading audio stream from: {audio_url}")
-        try:
-            audio_success = await fetch_data_stream(audio_url, request, headers=headers, file_path=audio_temp_path)
-            print(f"Audio download success: {audio_success}")
-        except Exception as e:
-            print(f"Audio download failed: {e}")
-            return False
+        audio_success = False
+        for attempt in range(max_retries):
+            try:
+                audio_success = await fetch_data_stream(audio_url, request, headers=headers, file_path=audio_temp_path)
+                print(f"Audio download attempt {attempt+1}/{max_retries} success: {audio_success}")
+                if audio_success:
+                    break
+                print(f"Retrying audio download... ({attempt+1}/{max_retries})")
+            except Exception as e:
+                print(f"Audio download attempt {attempt+1}/{max_retries} failed: {e}")
+                if attempt == max_retries - 1:
+                    return False
         
         if not video_success or not audio_success:
-            print("Failed to download video or audio stream")
+            print("Failed to download video or audio stream after multiple attempts")
             return False
         
         # 检查下载的文件大小和存在性
@@ -182,17 +195,38 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
                 print(f"Option 3 - Trying hardcoded paths based on OS")
                 import platform
-                if platform.system() == "Windows":
-                    ffmpeg_path = r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe"
+                system = platform.system()
+                if system == "Windows":
+                    # Windows可能的FFmpeg路径
+                    possible_paths = [
+                        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+                        r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
+                        r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe",
+                        r"C:\ffmpeg\bin\ffmpeg.exe"
+                    ]
+                    for path in possible_paths:
+                        if os.path.exists(path):
+                            ffmpeg_path = path
+                            print(f"Found FFmpeg in Windows path: {ffmpeg_path}")
+                            break
                 else:
-                    # Linux/macOS路径
-                    ffmpeg_path = "/usr/bin/ffmpeg"
-                print(f"Using hardcoded FFmpeg path: {ffmpeg_path}")
+                    # Linux/macOS可能的FFmpeg路径
+                    possible_paths = [
+                        "/usr/bin/ffmpeg",
+                        "/usr/local/bin/ffmpeg",
+                        "/opt/homebrew/bin/ffmpeg"
+                    ]
+                    for path in possible_paths:
+                        if os.path.exists(path):
+                            ffmpeg_path = path
+                            print(f"Found FFmpeg in Linux/macOS path: {ffmpeg_path}")
+                            break
             
             # 验证路径
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
                 print(f"Please install FFmpeg or configure the correct path in config.yaml")
+                print(f"System: {platform.system()}")
                 return False
             
             if not os.path.isfile(ffmpeg_path):
@@ -316,7 +350,9 @@ async def download_file_hybrid(request: Request,
         # 清理URL，去除多余的空格和反引号
         import re
         cleaned_url = url.strip()  # 去除首尾空格
-        cleaned_url = re.sub(r'^`|`$', '', cleaned_url)  # 去除首尾反引号
+        cleaned_url = re.sub(r'`', '', cleaned_url)  # 去除所有反引号
+        cleaned_url = re.sub(r'\s+', ' ', cleaned_url)  # 多个空格替换为单个空格
+        cleaned_url = cleaned_url.strip()  # 再次去除首尾空格
         print(f"清理前URL: '{url}'")
         print(f"清理后URL: '{cleaned_url}'")
         

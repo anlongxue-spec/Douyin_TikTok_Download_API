@@ -1,65 +1,82 @@
+import httpx
 import asyncio
-import os
-import sys
-
-# 添加项目根目录到 Python 路径
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from app.api.endpoints.download import fetch_data_stream
-from fastapi import Request
-
-class MockRequest:
-    """模拟 FastAPI Request 对象"""
-    async def is_disconnected(self):
-        return False
+import json
 
 async def test_bilibili_download():
-    # 测试的B站视频资源URL
-    url = "https://upos-sz-estgoss.bilivideo.com/upgcxcode/07/99/35182479907/35182479907-1-30080.m4s?e=ig8euxZM2rNcNbdlhoNvNC8BqJIzNbfqXBvEqxTEto8BTrNvN0GvT90W5JZMkX_YN0MvXg8gNEV4NC8xNEV4N03eN0B5tZlqNxTEto8BTrNvNeZVuJ10Kj_g2UB02J0mN0B5tZlqNCNEto8BTrNvNC7MTX502C8f2jmMQJ6mqF2fka1mqx6gqj0eN0B599M=&oi=1928713262&nbs=1&uipk=5&os=estgoss&og=ali&platform=pc&trid=c4220326fee94eb4881ab3144442524u&mid=1563114089&deadline=1768120119&gen=playurlv3&upsig=dac3e6e2f2b865b8f948234e50e9c359&uparams=e,oi,nbs,uipk,os,og,platform,trid,mid,deadline,gen&bvc=vod&nettype=0&bw=926070&f=u_0_0&qn_dyeid=22af4d47587cc89d002dbee669634317&agrr=1&buvid=439EB233-5D03-3E32-702A-5CB95A60614A57594infoc&build=0&dl=0&orderid=0,3"
+    """测试Bilibili视频下载修复效果"""
+    test_urls = [
+        # 原始问题URL（包含空格和反引号）
+        " `https://b23.tv/UzSQvAW` ",
+        # 正常URL
+        "https://b23.tv/UzSQvAW",
+        # 其他测试URL
+        "https://www.bilibili.com/video/BV1mG411n73c"
+    ]
     
-    # 读取B站的配置文件
-    import yaml
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crawlers', 'bilibili', 'web', 'config.yaml')
-    with open(config_path, 'r', encoding='utf-8') as file:
-        config = yaml.safe_load(file)
-    
-    # 获取B站的请求头
-    headers = config['TokenManager']['bilibili']['headers']
-    
-    # 创建临时文件
-    import tempfile
-    temp_file = tempfile.NamedTemporaryFile(suffix='.m4s', delete=False)
-    temp_file_path = temp_file.name
-    temp_file.close()
-    
-    try:
-        # 测试下载
-        print("开始测试B站视频资源下载...")
-        print(f"URL: {url}")
-        print(f"临时文件: {temp_file_path}")
-        
-        mock_request = MockRequest()
-        success = await fetch_data_stream(url, mock_request, headers=headers, file_path=temp_file_path)
-        
-        if success:
-            print("\n✓ 下载成功！")
+    async with httpx.AsyncClient() as client:
+        for test_url in test_urls:
+            print(f"\n测试URL: {test_url}")
             
-            # 验证文件
-            if os.path.exists(temp_file_path):
-                file_size = os.path.getsize(temp_file_path)
-                print(f"  文件大小: {file_size} 字节")
-                if file_size > 0:
-                    print("  文件不为空")
+            # 构建API请求
+            api_url = "http://localhost:80/api/download"
+            params = {
+                "url": test_url,
+                "with_watermark": "false",
+                "prefix": "true"
+            }
+            
+            try:
+                # 发送请求
+                print(f"发送请求到: {api_url}?{httpx.Request('GET', api_url, params=params).url.query}")
+                response = await client.get(api_url, params=params, timeout=60.0)
+                
+                # 打印响应
+                print(f"响应状态码: {response.status_code}")
+                print(f"响应头: {dict(response.headers)}")
+                
+                # 检查响应内容类型
+                content_type = response.headers.get('content-type', '')
+                print(f"Content-Type: {content_type}")
+                
+                if 'application/json' in content_type:
+                    # 响应是JSON
+                    try:
+                        data = response.json()
+                        print("成功解析JSON响应")
+                        print(f"响应内容: {json.dumps(data, ensure_ascii=False)}")
+                        
+                        if response.status_code == 200:
+                            if "无水印" in data:
+                                print("✓ 无水印视频下载成功")
+                                print(f"  视频链接: {data.get('无水印')}")
+                            else:
+                                print("⚠ 响应中未找到无水印视频链接")
+                        else:
+                            print(f"✗ 请求失败: {response.status_code}")
+                            print(f"错误信息: {data.get('message', '未知错误')}")
+                    except Exception as e:
+                        print(f"解析JSON响应失败: {e}")
                 else:
-                    print("  文件为空")
-        else:
-            print("\n✗ 下载失败！")
-            
-    finally:
-        # 清理临时文件
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-            print(f"\n清理临时文件: {temp_file_path}")
+                    # 响应不是JSON，可能是视频数据或其他二进制数据
+                    content_length = len(response.content)
+                    print(f"响应内容长度: {content_length} 字节")
+                    print("响应不是JSON，可能是视频数据或其他二进制数据")
+                    
+                    # 检查是否是视频文件
+                    if content_length > 1024 * 1024:  # 大于1MB
+                        print("✓ 可能是视频文件")
+                    else:
+                        # 尝试打印前100个字符
+                        try:
+                            preview = response.content[:100].decode('utf-8', errors='replace')
+                            print(f"响应预览: {preview}...")
+                        except Exception as e:
+                            print(f"无法预览响应内容: {e}")
+                    
+            except Exception as e:
+                print(f"✗ 请求异常: {e}")
+                import traceback
+                traceback.print_exc()
 
 if __name__ == "__main__":
     asyncio.run(test_bilibili_download())
