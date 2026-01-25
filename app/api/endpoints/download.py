@@ -127,10 +127,18 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         print(f"Video temp path: {video_temp_path}")
         print(f"Audio temp path: {audio_temp_path}")
         
-        # 清理视频和音频URL中的反引号
+        # 清理视频和音频URL中的反引号和引号
         import re
-        cleaned_video_url = re.sub(r'`', '', video_url)  # 去除视频URL中的反引号
-        cleaned_audio_url = re.sub(r'`', '', audio_url)  # 去除音频URL中的反引号
+        cleaned_video_url = video_url.strip()  # 去除首尾空格
+        cleaned_video_url = re.sub(r'[`'"']', '', cleaned_video_url)  # 去除所有反引号和引号
+        cleaned_video_url = re.sub(r'\s+', ' ', cleaned_video_url)  # 多个空格替换为单个空格
+        cleaned_video_url = cleaned_video_url.strip()  # 再次去除首尾空格
+        
+        cleaned_audio_url = audio_url.strip()  # 去除首尾空格
+        cleaned_audio_url = re.sub(r'[`'"']', '', cleaned_audio_url)  # 去除所有反引号和引号
+        cleaned_audio_url = re.sub(r'\s+', ' ', cleaned_audio_url)  # 多个空格替换为单个空格
+        cleaned_audio_url = cleaned_audio_url.strip()  # 再次去除首尾空格
+        
         print(f"清理前视频URL: '{video_url}'")
         print(f"清理后视频URL: '{cleaned_video_url}'")
         print(f"清理前音频URL: '{audio_url}'")
@@ -236,22 +244,54 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     possible_paths = [
                         "/usr/bin/ffmpeg",
                         "/usr/local/bin/ffmpeg",
-                        "/opt/homebrew/bin/ffmpeg"
+                        "/opt/homebrew/bin/ffmpeg",
+                        "/bin/ffmpeg",
+                        "/sbin/ffmpeg",
+                        "/usr/sbin/ffmpeg"
                     ]
                     for path in possible_paths:
                         if os.path.exists(path):
                             ffmpeg_path = path
                             print(f"Found FFmpeg in Linux/macOS path: {ffmpeg_path}")
                             break
+                    
+                    # 方法4: 尝试直接执行ffmpeg命令（不依赖路径）
+                    if not ffmpeg_path:
+                        print(f"Option 4 - Trying to execute ffmpeg command directly")
+                        try:
+                            # 直接尝试执行ffmpeg命令
+                            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
+                            if result.returncode == 0:
+                                # 如果命令执行成功，说明ffmpeg在PATH中
+                                ffmpeg_path = "ffmpeg"  # 使用命令名，让系统自己找
+                                print(f"Found FFmpeg by direct execution")
+                        except Exception as e:
+                            print(f"Direct execution failed: {e}")
             
             # 验证路径
-            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+            if not ffmpeg_path:
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
                 print(f"Please install FFmpeg or configure the correct path in config.yaml")
                 print(f"System: {system}")
                 return False
             
-            if not os.path.isfile(ffmpeg_path):
+            # 特殊处理：当ffmpeg_path为"ffmpeg"时，尝试执行它来验证
+            if ffmpeg_path == "ffmpeg":
+                try:
+                    result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
+                    if result.returncode != 0:
+                        print(f"ERROR: FFmpeg command failed: {result.stderr}")
+                        return False
+                    print(f"Verified FFmpeg command works")
+                except Exception as e:
+                    print(f"ERROR: Failed to verify FFmpeg command: {e}")
+                    return False
+            elif not os.path.exists(ffmpeg_path):
+                print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
+                print(f"Please install FFmpeg or configure the correct path in config.yaml")
+                print(f"System: {system}")
+                return False
+            elif not os.path.isfile(ffmpeg_path):
                 print(f"ERROR: FFmpeg path is not a file: {ffmpeg_path}")
                 return False
             
@@ -372,7 +412,7 @@ async def download_file_hybrid(request: Request,
         # 清理URL，去除多余的空格和反引号
         import re
         cleaned_url = url.strip()  # 去除首尾空格
-        cleaned_url = re.sub(r'`', '', cleaned_url)  # 去除所有反引号
+        cleaned_url = re.sub(r'[`'"']', '', cleaned_url)  # 去除所有反引号和引号
         cleaned_url = re.sub(r'\s+', ' ', cleaned_url)  # 多个空格替换为单个空格
         cleaned_url = cleaned_url.strip()  # 再次去除首尾空格
         print(f"清理前URL: '{url}'")
