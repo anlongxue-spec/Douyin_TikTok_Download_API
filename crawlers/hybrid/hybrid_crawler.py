@@ -586,6 +586,10 @@ class HybridCrawler:
                     if potential_url and any(ext in potential_url.lower() for ext in ['.mp4', '.flv', '.avi', '.mov', '.wmv', '.mkv']):
                         video_url = potential_url
                         nwm_video_url_HQ = video_url
+                    # 检查是否为图片URL（检查文件扩展名）
+                    elif potential_url and any(ext in potential_url.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                        print(f"Skipping image URL: {potential_url}")
+                        # 不设置video_url，让系统回退到使用Bilibili API获取视频URL
                 elif 'url' in data:
                     potential_url = data.get('url')
                     # 验证是否为视频URL（检查文件扩展名）
