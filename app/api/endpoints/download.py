@@ -130,12 +130,12 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         # 清理视频和音频URL中的反引号和引号
         import re
         cleaned_video_url = video_url.strip()  # 去除首尾空格
-        cleaned_video_url = re.sub(r'[`'"']', '', cleaned_video_url)  # 去除所有反引号和引号
+        cleaned_video_url = re.sub(r"[`'\"]", '', cleaned_video_url)  # 去除所有反引号和引号
         cleaned_video_url = re.sub(r'\s+', ' ', cleaned_video_url)  # 多个空格替换为单个空格
         cleaned_video_url = cleaned_video_url.strip()  # 再次去除首尾空格
         
         cleaned_audio_url = audio_url.strip()  # 去除首尾空格
-        cleaned_audio_url = re.sub(r'[`'"']', '', cleaned_audio_url)  # 去除所有反引号和引号
+        cleaned_audio_url = re.sub(r"[`'\"]", '', cleaned_audio_url)  # 去除所有反引号和引号
         cleaned_audio_url = re.sub(r'\s+', ' ', cleaned_audio_url)  # 多个空格替换为单个空格
         cleaned_audio_url = cleaned_audio_url.strip()  # 再次去除首尾空格
         
@@ -412,7 +412,7 @@ async def download_file_hybrid(request: Request,
         # 清理URL，去除多余的空格和反引号
         import re
         cleaned_url = url.strip()  # 去除首尾空格
-        cleaned_url = re.sub(r'[`'"']', '', cleaned_url)  # 去除所有反引号和引号
+        cleaned_url = re.sub(r"[`'\"]", '', cleaned_url)  # 去除所有反引号和引号
         cleaned_url = re.sub(r'\s+', ' ', cleaned_url)  # 多个空格替换为单个空格
         cleaned_url = cleaned_url.strip()  # 再次去除首尾空格
         print(f"清理前URL: '{url}'")
