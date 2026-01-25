@@ -194,105 +194,53 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             print("Audio file is empty or doesn't exist")
             return False
         
-        # 尝试多种方式获取FFmpeg路径
+        # 使用微信云托管环境中已安装的ffmpeg工具
         try:
-            # 方法1: 使用配置文件中的路径
-            ffmpeg_path = config.get('API').get('FFmpeg_Path')
-            print(f"Option 1 - FFmpeg path from config: {ffmpeg_path}")
-            
-            # 方法2: 如果配置文件路径不可用或在当前系统中不存在，使用系统命令查找
             import platform
             system = platform.system()
-            config_path_valid = False
-            if ffmpeg_path:
-                # 检查配置路径是否适合当前系统
-                if system == "Windows":
-                    config_path_valid = os.path.exists(ffmpeg_path)
-                else:
-                    # 在Linux/macOS中，Windows路径格式肯定无效
-                    if "C:" in ffmpeg_path or "\\" in ffmpeg_path:
-                        config_path_valid = False
-                        print(f"Config path is Windows format, not valid for {system}")
-                    else:
-                        config_path_valid = os.path.exists(ffmpeg_path)
             
-            if not config_path_valid:
-                print(f"Option 2 - Trying to find FFmpeg in system PATH")
+            # 微信云托管环境（Linux）使用绝对路径 "/usr/bin/ffmpeg"
+            # Windows环境使用系统PATH中的ffmpeg
+            if system == "Linux":
+                # 统一使用绝对路径 "/usr/bin/ffmpeg"（微信云托管环境）
+                ffmpeg_path = "/usr/bin/ffmpeg"
+                print(f"Using FFmpeg path for WeChat Cloud Hosting (Linux): {ffmpeg_path}")
+            else:
+                # Windows环境，尝试使用系统PATH中的ffmpeg
                 import shutil
                 ffmpeg_path = shutil.which("ffmpeg")
-                if ffmpeg_path:
-                    print(f"Found FFmpeg in PATH: {ffmpeg_path}")
+                print(f"Using FFmpeg path for Windows: {ffmpeg_path}")
             
-            # 方法3: 如果仍未找到，尝试硬编码路径（跨平台）
-            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
-                print(f"Option 3 - Trying hardcoded paths based on OS")
-                if system == "Windows":
-                    # Windows可能的FFmpeg路径
-                    possible_paths = [
-                        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
-                        r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
-                        r"C:\Program Files (x86)\iflyrecClient\resources\tj_B1\node_modules\@ffmpeg-installer\win32-x64\ffmpeg.exe",
-                        r"C:\ffmpeg\bin\ffmpeg.exe"
-                    ]
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            ffmpeg_path = path
-                            print(f"Found FFmpeg in Windows path: {ffmpeg_path}")
-                            break
-                else:
-                    # Linux/macOS可能的FFmpeg路径
-                    possible_paths = [
-                        "/usr/bin/ffmpeg",
-                        "/usr/local/bin/ffmpeg",
-                        "/opt/homebrew/bin/ffmpeg",
-                        "/bin/ffmpeg",
-                        "/sbin/ffmpeg",
-                        "/usr/sbin/ffmpeg"
-                    ]
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            ffmpeg_path = path
-                            print(f"Found FFmpeg in Linux/macOS path: {ffmpeg_path}")
-                            break
-                    
-                    # 方法4: 尝试直接执行ffmpeg命令（不依赖路径）
-                    if not ffmpeg_path:
-                        print(f"Option 4 - Trying to execute ffmpeg command directly")
-                        try:
-                            # 直接尝试执行ffmpeg命令
-                            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
-                            if result.returncode == 0:
-                                # 如果命令执行成功，说明ffmpeg在PATH中
-                                ffmpeg_path = "ffmpeg"  # 使用命令名，让系统自己找
-                                print(f"Found FFmpeg by direct execution")
-                        except Exception as e:
-                            print(f"Direct execution failed: {e}")
-            
-            # 验证路径
+            # 验证FFmpeg路径是否存在
             if not ffmpeg_path:
-                print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
-                print(f"Please install FFmpeg or configure the correct path in config.yaml")
-                print(f"System: {system}")
+                print(f"ERROR: FFmpeg path not found")
+                print(f"Please ensure FFmpeg is installed in the environment")
                 return False
             
-            # 特殊处理：当ffmpeg_path为"ffmpeg"时，尝试执行它来验证
-            if ffmpeg_path == "ffmpeg":
-                try:
-                    result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
-                    if result.returncode != 0:
-                        print(f"ERROR: FFmpeg command failed: {result.stderr}")
-                        return False
-                    print(f"Verified FFmpeg command works")
-                except Exception as e:
-                    print(f"ERROR: Failed to verify FFmpeg command: {e}")
-                    return False
-            elif not os.path.exists(ffmpeg_path):
+            if not os.path.exists(ffmpeg_path):
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
-                print(f"Please install FFmpeg or configure the correct path in config.yaml")
-                print(f"System: {system}")
+                print(f"Please ensure FFmpeg is installed in the environment")
                 return False
-            elif not os.path.isfile(ffmpeg_path):
+            
+            # 验证FFmpeg是否为文件
+            if not os.path.isfile(ffmpeg_path):
                 print(f"ERROR: FFmpeg path is not a file: {ffmpeg_path}")
+                return False
+            
+            # 验证FFmpeg是否有可执行权限
+            if not os.access(ffmpeg_path, os.X_OK):
+                print(f"ERROR: FFmpeg does not have executable permissions: {ffmpeg_path}")
+                return False
+            
+            # 验证FFmpeg是否可以正常执行
+            try:
+                result = subprocess.run([ffmpeg_path, "-version"], capture_output=True, text=True, timeout=10)
+                if result.returncode != 0:
+                    print(f"ERROR: FFmpeg execution failed: {result.stderr}")
+                    return False
+                print(f"Verified FFmpeg works correctly: {result.stdout.split('\n')[0]}")
+            except Exception as e:
+                print(f"ERROR: Failed to verify FFmpeg execution: {e}")
                 return False
             
             print(f"Final FFmpeg path: {ffmpeg_path}")
