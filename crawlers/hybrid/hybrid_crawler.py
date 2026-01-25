@@ -575,14 +575,23 @@ class HybridCrawler:
                 
                 # 检查是否有直接的视频URL字段
                 if 'video_url' in data:
-                    video_url = data.get('video_url')
-                    nwm_video_url_HQ = video_url
+                    potential_url = data.get('video_url')
+                    # 验证是否为视频URL（检查文件扩展名）
+                    if potential_url and any(ext in potential_url.lower() for ext in ['.mp4', '.flv', '.avi', '.mov', '.wmv', '.mkv']):
+                        video_url = potential_url
+                        nwm_video_url_HQ = video_url
                 elif 'videoUrl' in data:
-                    video_url = data.get('videoUrl')
-                    nwm_video_url_HQ = video_url
+                    potential_url = data.get('videoUrl')
+                    # 验证是否为视频URL（检查文件扩展名）
+                    if potential_url and any(ext in potential_url.lower() for ext in ['.mp4', '.flv', '.avi', '.mov', '.wmv', '.mkv']):
+                        video_url = potential_url
+                        nwm_video_url_HQ = video_url
                 elif 'url' in data:
-                    video_url = data.get('url')
-                    nwm_video_url_HQ = video_url
+                    potential_url = data.get('url')
+                    # 验证是否为视频URL（检查文件扩展名）
+                    if potential_url and any(ext in potential_url.lower() for ext in ['.mp4', '.flv', '.avi', '.mov', '.wmv', '.mkv']):
+                        video_url = potential_url
+                        nwm_video_url_HQ = video_url
                 
                 # 如果没有直接的视频URL，尝试使用Bilibili API获取
                 if not video_url:
