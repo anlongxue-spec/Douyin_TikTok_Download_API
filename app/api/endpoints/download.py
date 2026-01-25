@@ -213,15 +213,41 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             if ffmpeg_path:
                 print(f"Found FFmpeg in PATH: {ffmpeg_path}")
             
-            # 方法2: 如果PATH中没有，尝试常见的Linux FFmpeg路径
+            # 方法2: 直接执行which命令查找ffmpeg
+            if not ffmpeg_path:
+                print("Method 2: Trying to execute 'which ffmpeg' command")
+                try:
+                    result = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and result.stdout.strip():
+                        ffmpeg_path = result.stdout.strip()
+                        print(f"Found FFmpeg via 'which' command: {ffmpeg_path}")
+                except Exception as e:
+                    print(f"'which ffmpeg' command failed: {e}")
+            
+            # 方法3: 尝试直接执行ffmpeg命令验证
+            if not ffmpeg_path:
+                print("Method 3: Trying to execute 'ffmpeg' command directly")
+                try:
+                    result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        # 如果命令执行成功，说明ffmpeg在PATH中
+                        ffmpeg_path = "ffmpeg"
+                        print(f"Found FFmpeg by direct execution")
+                except Exception as e:
+                    print(f"Direct execution failed: {e}")
+            
+            # 方法4: 如果PATH中没有，尝试常见的Linux FFmpeg路径
             if not ffmpeg_path and system == "Linux":
-                print("Method 2: Trying common Linux FFmpeg paths")
+                print("Method 4: Trying common Linux FFmpeg paths")
                 common_paths = [
                     "/usr/bin/ffmpeg",
                     "/usr/local/bin/ffmpeg",
                     "/bin/ffmpeg",
                     "/sbin/ffmpeg",
-                    "/usr/sbin/ffmpeg"
+                    "/usr/sbin/ffmpeg",
+                    "/usr/local/ffmpeg/bin/ffmpeg",
+                    "/opt/ffmpeg/bin/ffmpeg",
+                    "/usr/ffmpeg/bin/ffmpeg"
                 ]
                 for path in common_paths:
                     if os.path.exists(path):
@@ -229,9 +255,9 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                         print(f"Found FFmpeg in common path: {ffmpeg_path}")
                         break
             
-            # 方法3: Windows环境的常见路径
+            # 方法5: Windows环境的常见路径
             if not ffmpeg_path and system == "Windows":
-                print("Method 3: Trying common Windows FFmpeg paths")
+                print("Method 5: Trying common Windows FFmpeg paths")
                 common_paths = [
                     r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
                     r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",
@@ -247,12 +273,8 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
             if not ffmpeg_path:
                 print("ERROR: FFmpeg path not found in any location")
                 print("Please ensure FFmpeg is installed in the environment")
-                # 在没有FFmpeg的情况下，尝试直接返回视频流
-                print("Trying to return video stream directly without FFmpeg")
-                # 复制视频流到输出路径
-                import shutil
-                shutil.copy2(video_temp_path, output_path)
-                print(f"Copied video stream directly to: {output_path}")
+                print("Cannot merge video and audio without FFmpeg")
+                print("Video will have no sound")
                 # 清理临时文件
                 try:
                     if os.path.exists(video_temp_path):
@@ -262,16 +284,13 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     print("Temporary files cleaned up")
                 except Exception as e:
                     print(f"Failed to clean up temporary files: {e}")
-                return True
+                return False
             
             # 验证FFmpeg路径是否存在
             if not os.path.exists(ffmpeg_path):
                 print(f"ERROR: FFmpeg path does not exist: {ffmpeg_path}")
-                print("Trying to return video stream directly without FFmpeg")
-                # 复制视频流到输出路径
-                import shutil
-                shutil.copy2(video_temp_path, output_path)
-                print(f"Copied video stream directly to: {output_path}")
+                print("Cannot merge video and audio without FFmpeg")
+                print("Video will have no sound")
                 # 清理临时文件
                 try:
                     if os.path.exists(video_temp_path):
@@ -281,16 +300,13 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     print("Temporary files cleaned up")
                 except Exception as e:
                     print(f"Failed to clean up temporary files: {e}")
-                return True
+                return False
             
             # 验证FFmpeg是否为文件
             if not os.path.isfile(ffmpeg_path):
                 print(f"ERROR: FFmpeg path is not a file: {ffmpeg_path}")
-                print("Trying to return video stream directly without FFmpeg")
-                # 复制视频流到输出路径
-                import shutil
-                shutil.copy2(video_temp_path, output_path)
-                print(f"Copied video stream directly to: {output_path}")
+                print("Cannot merge video and audio without FFmpeg")
+                print("Video will have no sound")
                 # 清理临时文件
                 try:
                     if os.path.exists(video_temp_path):
@@ -300,16 +316,13 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     print("Temporary files cleaned up")
                 except Exception as e:
                     print(f"Failed to clean up temporary files: {e}")
-                return True
+                return False
             
             # 验证FFmpeg是否有可执行权限
             if not os.access(ffmpeg_path, os.X_OK):
                 print(f"ERROR: FFmpeg does not have executable permissions: {ffmpeg_path}")
-                print("Trying to return video stream directly without FFmpeg")
-                # 复制视频流到输出路径
-                import shutil
-                shutil.copy2(video_temp_path, output_path)
-                print(f"Copied video stream directly to: {output_path}")
+                print("Cannot merge video and audio without FFmpeg")
+                print("Video will have no sound")
                 # 清理临时文件
                 try:
                     if os.path.exists(video_temp_path):
@@ -319,7 +332,7 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                     print("Temporary files cleaned up")
                 except Exception as e:
                     print(f"Failed to clean up temporary files: {e}")
-                return True
+                return False
             
             # 验证FFmpeg是否可以正常执行
             try:
