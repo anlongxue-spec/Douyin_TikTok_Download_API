@@ -631,8 +631,8 @@ class HybridCrawler:
                         video_url = sorted_video_list[0].get('baseUrl') if sorted_video_list else None
                         audio_url = sorted_audio_list[0].get('baseUrl') if sorted_audio_list else None
                         
-                        # 选择次高质量的视频作为无水印HQ链接（如果有多个质量）
-                        nwm_video_url_HQ = sorted_video_list[1].get('baseUrl') if len(sorted_video_list) > 1 else video_url
+                        # 选择最高质量的视频作为无水印HQ链接
+                        nwm_video_url_HQ = video_url
                 
                 # 将视频下载链接直接添加到result_data中，与抖音格式保持一致
                 result_data['wm_video_url'] = video_url  # Bilibili没有水印概念
