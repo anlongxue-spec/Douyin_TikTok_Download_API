@@ -6,6 +6,14 @@ LABEL maintainer="Evil0ctal"
 # 设置非交互模式，避免 Docker 构建时的交互问题
 ENV DEBIAN_FRONTEND=noninteractive
 
+# 更新apt-get并安装ffmpeg及其依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 验证ffmpeg安装
+RUN ffmpeg -version
+
 # 设置工作目录
 WORKDIR /app
 
