@@ -238,7 +238,9 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
                 if result.returncode != 0:
                     print(f"ERROR: FFmpeg execution failed: {result.stderr}")
                     return False
-                print(f"Verified FFmpeg works correctly: {result.stdout.split('\n')[0]}")
+                # 提取版本信息，避免在f-string中使用反斜杠
+                version_line = result.stdout.split('\n')[0]
+                print(f"Verified FFmpeg works correctly: {version_line}")
             except Exception as e:
                 print(f"ERROR: Failed to verify FFmpeg execution: {e}")
                 return False
