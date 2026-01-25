@@ -568,32 +568,65 @@ class HybridCrawler:
             }
             # Bilibili只有视频，直接处理视频数据
             if url_type == 'video':
-                # 获取视频播放地址需要额外调用API
-                cid = data.get('cid')  # 获取cid
-                if cid:
-                    # 获取播放链接，cid需要转换为字符串
-                    playurl_data = await self.BilibiliWebCrawler.fetch_video_playurl(aweme_id, str(cid))
-                    # 从播放数据中提取URL
-                    dash = playurl_data.get('data', {}).get('dash', {})
-                    video_list = dash.get('video', [])
-                    audio_list = dash.get('audio', [])
+                # 尝试从数据中直接提取视频URL（适用于开源解析引擎返回的数据）
+                video_url = None
+                audio_url = None
+                nwm_video_url_HQ = None
+                
+                # 检查是否有直接的视频URL字段
+                if 'video_url' in data:
+                    video_url = data.get('video_url')
+                    nwm_video_url_HQ = video_url
+                elif 'videoUrl' in data:
+                    video_url = data.get('videoUrl')
+                    nwm_video_url_HQ = video_url
+                elif 'url' in data:
+                    video_url = data.get('url')
+                    nwm_video_url_HQ = video_url
+                
+                # 如果没有直接的视频URL，尝试使用Bilibili API获取
+                if not video_url:
+                    # 获取视频播放地址需要额外调用API
+                    cid = data.get('cid')  # 获取cid
+                    # 如果没有cid，尝试重新获取视频详情
+                    if not cid:
+                        try:
+                            # 重新获取视频详情，尝试获取cid
+                            video_detail = await self.BilibiliWebCrawler.fetch_one_video(aweme_id)
+                            cid = video_detail.get('data', {}).get('cid')
+                        except Exception as e:
+                            print(f"Failed to get cid for Bilibili video: {e}")
                     
-                    # 选择最高质量的视频流
-                    # 按视频分辨率(宽*高)从高到低排序
-                    sorted_video_list = sorted(video_list, 
-                                              key=lambda x: (x.get('width', 0) * x.get('height', 0), x.get('bandwidth', 0)), 
-                                              reverse=True) if video_list else []
-                    
-                    # 按音频带宽从高到低排序
-                    sorted_audio_list = sorted(audio_list, key=lambda x: x.get('bandwidth', 0), reverse=True) if audio_list else []
-                    
-                    # 选择最高质量的视频和音频
-                    video_url = sorted_video_list[0].get('baseUrl') if sorted_video_list else None
-                    audio_url = sorted_audio_list[0].get('baseUrl') if sorted_audio_list else None
-                    
-                    # 选择次高质量的视频作为无水印HQ链接（如果有多个质量）
-                    nwm_video_url_HQ = sorted_video_list[1].get('baseUrl') if len(sorted_video_list) > 1 else video_url
-                    
+                    if cid:
+                        # 获取播放链接，cid需要转换为字符串
+                        playurl_data = await self.BilibiliWebCrawler.fetch_video_playurl(aweme_id, str(cid))
+                        # 从播放数据中提取URL
+                        dash = playurl_data.get('data', {}).get('dash', {})
+                        video_list = dash.get('video', [])
+                        audio_list = dash.get('audio', [])
+                        
+                        # 选择最高质量的视频流
+                        # 按视频分辨率(宽*高)从高到低排序
+                        sorted_video_list = sorted(video_list, 
+                                                  key=lambda x: (x.get('width', 0) * x.get('height', 0), x.get('bandwidth', 0)), 
+                                                  reverse=True) if video_list else []
+                        
+                        # 按音频带宽从高到低排序
+                        sorted_audio_list = sorted(audio_list, key=lambda x: x.get('bandwidth', 0), reverse=True) if audio_list else []
+                        
+                        # 选择最高质量的视频和音频
+                        video_url = sorted_video_list[0].get('baseUrl') if sorted_video_list else None
+                        audio_url = sorted_audio_list[0].get('baseUrl') if sorted_audio_list else None
+                        
+                        # 选择次高质量的视频作为无水印HQ链接（如果有多个质量）
+                        nwm_video_url_HQ = sorted_video_list[1].get('baseUrl') if len(sorted_video_list) > 1 else video_url
+                
+                # 将视频下载链接直接添加到result_data中，与抖音格式保持一致
+                result_data['wm_video_url'] = video_url  # Bilibili没有水印概念
+                result_data['nwm_video_url'] = video_url  # Bilibili没有水印概念
+                
+                # 构建api_data
+                if video_url:
                     api_data = {
                         'video_data': {
                             'wm_video_url': video_url,  # Bilibili没有水印概念
@@ -601,7 +634,7 @@ class HybridCrawler:
                             'nwm_video_url': video_url,  # 无水印链接
                             'nwm_video_url_HQ': nwm_video_url_HQ,  # 无水印高清链接
                             'audio_url': audio_url,  # Bilibili音视频分离
-                            'cid': cid,  # 保存cid供后续使用
+                            'cid': data.get('cid'),  # 保存cid供后续使用
                         }
                     }
                 else:
@@ -611,7 +644,8 @@ class HybridCrawler:
                             'wm_video_url_HQ': None,
                             'nwm_video_url': None,
                             'nwm_video_url_HQ': None,
-                            'error': 'Failed to get cid for video playback'
+                            'audio_url': None,
+                            'error': 'Failed to get video URL for Bilibili video'
                         }
                     }
         # 小红书数据处理/XiaoHongShu data processing

@@ -15,7 +15,7 @@ async def test_bilibili_hybrid_crawler():
     try:
         # 调用混合爬虫解析视频
         print("\n开始解析视频数据...")
-        data = await HybridCrawler.hybrid_parsing_single_video(test_url, minimal=False)
+        data = await HybridCrawler.hybrid_parsing_single_video(test_url, minimal=True)
         
         print(f"\n解析结果:")
         print(f"平台: {data.get('platform')}")
