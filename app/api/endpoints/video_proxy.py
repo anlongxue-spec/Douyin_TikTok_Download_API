@@ -88,16 +88,21 @@ async def proxy_test(
 async def video_proxy(
     request: Request,
     video_url: str = Query(...),
-    platform: str = Query(...) ):
+    platform: str = Query(...),
+    with_audio: bool = Query(False),
+    merge: bool = Query(False) ):
     print(f"Received video proxy request for platform: {platform}")
     print(f"Video URL: {video_url}")
     print(f"Request headers: {dict(request.headers)}")
+    print(f"with_audio: {with_audio}, merge: {merge}")
     """
     视频代理下载端点，避免浏览器直接访问第三方视频URL导致的跨域错误
     
     Parameters:
     - video_url: 原始视频URL
     - platform: 平台名称（用于获取正确的headers）
+    - with_audio: 是否包含音频
+    - merge: 是否合并视频和音频
     """
     try:
         # 获取对应平台的headers
@@ -163,471 +168,257 @@ async def video_proxy(
         
         print(f"Final proxies: {proxies}")
         
-        print(f"Using headers: {headers}")
+        # 处理范围请求
+        range_header = request.headers.get('range')
+        print(f"Range header: {range_header}")
+        
+        # 构建请求头，包含范围请求
+        request_headers = headers.copy()
+        if range_header:
+            request_headers['range'] = range_header
+            print(f"Added range header to request: {range_header}")
+        
+        print(f"Using headers: {request_headers}")
         print(f"Using proxies: {proxies}")
         
-        # B站视频特殊处理：直接流式返回视频内容
-        if platform == 'bilibili':
-            # 直接使用流式读取，返回视频内容，不使用临时文件
-            print("Streaming Bilibili video content directly")
-            print(f"Using video URL: {video_url}")
-            print(f"Using headers: {headers}")
-            try:
-                # 根据是否有代理来创建不同的client
-                if proxies:
-                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
-                        async with client.stream('GET', video_url, headers=headers) as response:
-                            # 检查响应状态码
-                            print(f"Video stream response status: {response.status_code}")
-                            print(f"Response headers: {dict(response.headers)}")
-                            
-                            if response.status_code != 200:
-                                print(f"Video stream request failed with status: {response.status_code}")
-                                # 确保使用标准的HTTP状态码
-                                if response.status_code < 100 or response.status_code >= 600:
-                                    status_code = 500
-                                else:
-                                    status_code = response.status_code
-                                raise HTTPException(
-                                    status_code=status_code,
-                                    detail=f"视频流请求失败: {response.status_code}"
-                                )
-                            
-                            # 获取响应头中的Content-Type
-                            content_type = response.headers.get('content-type', 'video/mp4')
-                            print(f"Content-Type from response: {content_type}")
-                            
-                            # 构建响应头
-                            response_headers = {
-                                'Access-Control-Allow-Origin': '*',
-                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                            }
-                            
-                            async def stream_content():
-                                total_bytes = 0
-                                chunk_count = 0
-                                has_data = False
-                                try:
-                                    # 直接读取所有chunk
-                                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                                        if chunk:
-                                            has_data = True
-                                            total_bytes += len(chunk)
-                                            chunk_count += 1
-                                            if chunk_count == 1:
-                                                print(f"Yielded first chunk, size: {len(chunk)}")
-                                            elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                            yield chunk
-                                    
-                                    if not has_data:
-                                        print("No data received from server")
-                                        # 如果没有数据，抛出异常
-                                        raise HTTPException(
-                                            status_code=500,
-                                            detail="视频内容为空"
-                                        )
-                                    
-                                    print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
-                                except httpx.StreamClosed as e:
-                                    print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
-                                    # 继续完成流，不要中断
-                                except Exception as e:
-                                    print(f"Error reading stream: {e}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    # 尝试继续，不要因为错误中断整个流程
-                            
-                            print("Starting to stream Bilibili video content")
-                            return StreamingResponse(
-                                content=stream_content(),
-                                media_type=content_type,
-                                headers=response_headers
-                            )
-                else:
-                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                        async with client.stream('GET', video_url, headers=headers) as response:
-                            # 检查响应状态码
-                            print(f"Video stream response status: {response.status_code}")
-                            print(f"Response headers: {dict(response.headers)}")
-                            
-                            if response.status_code != 200:
-                                print(f"Video stream request failed with status: {response.status_code}")
-                                # 确保使用标准的HTTP状态码
-                                if response.status_code < 100 or response.status_code >= 600:
-                                    status_code = 500
-                                else:
-                                    status_code = response.status_code
-                                raise HTTPException(
-                                    status_code=status_code,
-                                    detail=f"视频流请求失败: {response.status_code}"
-                                )
-                            
-                            # 获取响应头中的Content-Type
-                            content_type = response.headers.get('content-type', 'video/mp4')
-                            print(f"Content-Type from response: {content_type}")
-                            
-                            # 构建响应头
-                            response_headers = {
-                                'Access-Control-Allow-Origin': '*',
-                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                            }
-                            
-                            async def stream_content():
-                                total_bytes = 0
-                                chunk_count = 0
-                                has_data = False
-                                try:
-                                    # 直接读取所有chunk
-                                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                                        if chunk:
-                                            has_data = True
-                                            total_bytes += len(chunk)
-                                            chunk_count += 1
-                                            if chunk_count == 1:
-                                                print(f"Yielded first chunk, size: {len(chunk)}")
-                                            elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                            yield chunk
-                                    
-                                    if not has_data:
-                                        print("No data received from server")
-                                        # 如果没有数据，抛出异常
-                                        raise HTTPException(
-                                            status_code=500,
-                                            detail="视频内容为空"
-                                        )
-                                    
-                                    print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
-                                except httpx.StreamClosed as e:
-                                    print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
-                                    # 继续完成流，不要中断
-                                except Exception as e:
-                                    print(f"Error reading stream: {e}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    # 尝试继续，不要因为错误中断整个流程
-                            
-                            print("Starting to stream Bilibili video content")
-                            return StreamingResponse(
-                                content=stream_content(),
-                                media_type=content_type,
-                                headers=response_headers
-                            )
-            except Exception as e:
-                print(f"Streaming failed: {e}")
-                import traceback
-                traceback.print_exc()
-                # 如果流式读取失败，尝试使用普通请求
-                try:
-                    print("Falling back to non-streaming request")
-                    # 根据是否有代理来创建不同的client
-                    if proxies:
-                        async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
-                            response = await client.get(video_url, headers=headers)
-                            print(f"Video stream response status: {response.status_code}")
-                            print(f"Response content length: {len(response.content)}")
-                            
-                            # 检查响应内容是否为空
-                            if not response.content:
-                                print("Response content is empty")
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail="视频内容为空"
-                                )
-                            
-                            # 获取响应头中的Content-Type
-                            content_type = response.headers.get('content-type', 'video/mp4')
-                            
-                            # 构建响应头
-                            response_headers = {
-                                'Access-Control-Allow-Origin': '*',
-                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
-                                'Content-Length': str(len(response.content))
-                            }
-                            
-                            async def stream_content():
-                                yield response.content
-                            
-                            print("Returning Bilibili video content as bytes")
-                            return StreamingResponse(
-                                content=stream_content(),
-                                media_type=content_type,
-                                headers=response_headers
-                            )
-                    else:
-                        async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                            response = await client.get(video_url, headers=headers)
-                            print(f"Video stream response status: {response.status_code}")
-                            print(f"Response content length: {len(response.content)}")
-                            
-                            # 检查响应内容是否为空
-                            if not response.content:
-                                print("Response content is empty")
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail="视频内容为空"
-                                )
-                            
-                            # 获取响应头中的Content-Type
-                            content_type = response.headers.get('content-type', 'video/mp4')
-                            
-                            # 构建响应头
-                            response_headers = {
-                                'Access-Control-Allow-Origin': '*',
-                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
-                                'Content-Length': str(len(response.content))
-                            }
-                            
-                            async def stream_content():
-                                yield response.content
-                            
-                            print("Returning Bilibili video content as bytes")
-                            return StreamingResponse(
-                                content=stream_content(),
-                                media_type=content_type,
-                                headers=response_headers
-                            )
-                except Exception as e:
-                    print(f"Failed to get video content: {e}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"无法获取视频内容: {str(e)}"
-                    )
+        # 统一的视频处理函数
+        async def handle_video_request(url, platform_name):
+            # 根据是否有代理来创建不同的client
+            if proxies:
+                async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
+                    try:
+                        # 先尝试流式请求
+                        async with client.stream('GET', url, headers=request_headers) as response:
+                            return await process_response(response, platform_name)
+                    except Exception as e:
+                        print(f"Streaming request failed: {e}")
+                        # 如果流式请求失败，尝试普通请求
+                        try:
+                            print("Falling back to non-streaming request")
+                            response = await client.get(url, headers=request_headers)
+                            return await process_non_streaming_response(response, platform_name)
+                        except Exception as e2:
+                            print(f"Non-streaming request failed: {e2}")
+                            raise
+            else:
+                async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
+                    try:
+                        # 先尝试流式请求
+                        async with client.stream('GET', url, headers=request_headers) as response:
+                            return await process_response(response, platform_name)
+                    except Exception as e:
+                        print(f"Streaming request failed: {e}")
+                        # 如果流式请求失败，尝试普通请求
+                        try:
+                            print("Falling back to non-streaming request")
+                            response = await client.get(url, headers=request_headers)
+                            return await process_non_streaming_response(response, platform_name)
+                        except Exception as e2:
+                            print(f"Non-streaming request failed: {e2}")
+                            raise
         
-        # 其他平台直接返回视频流
-        # 根据是否有代理来创建不同的client
-        if proxies:
-            async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
-                # 使用流式读取来避免内存问题
-                try:
-                    async with client.stream('GET', video_url, headers=headers) as response:
-                        # 检查响应状态码
-                        print(f"Video stream response status: {response.status_code}")
-                        print(f"Response headers: {dict(response.headers)}")
-                        
-                        if response.status_code != 200:
-                            print(f"Video stream request failed with status: {response.status_code}")
-                            # 确保使用标准的HTTP状态码
-                            if response.status_code < 100 or response.status_code >= 600:
-                                status_code = 500
-                            else:
-                                status_code = response.status_code
-                            raise HTTPException(
-                                status_code=status_code,
-                                detail=f"视频流请求失败: {response.status_code}"
-                            )
-                        
-                        # 获取响应头中的Content-Type
-                        content_type = response.headers.get('content-type', 'video/mp4')
-                        print(f"Content-Type from response: {content_type}")
-                        
-                        # 构建响应头
-                        response_headers = {
-                            'Access-Control-Allow-Origin': '*',
-                            'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
-                        }
-                        
-                        async def stream_content():
-                            total_bytes = 0
-                            chunk_count = 0
-                            has_data = False
-                            try:
-                                # 直接读取所有chunk
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    if chunk:
-                                        has_data = True
-                                        total_bytes += len(chunk)
-                                        chunk_count += 1
-                                        if chunk_count == 1:
-                                            print(f"Yielded first chunk, size: {len(chunk)}")
-                                        elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                        yield chunk
-                                
-                                if not has_data:
-                                    print("No data received from server")
-                                    # 如果没有数据，抛出异常
-                                    raise HTTPException(
-                                        status_code=500,
-                                        detail="视频内容为空"
-                                    )
-                                
-                                print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
-                            except httpx.StreamClosed as e:
-                                print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
-                                # 继续完成流，不要中断
-                            except Exception as e:
-                                print(f"Error reading stream: {e}")
-                                import traceback
-                                traceback.print_exc()
-                                # 尝试继续，不要因为错误中断整个流程
-                        
-                        # 返回视频流
-                        return StreamingResponse(
-                            content=stream_content(),
-                            media_type=content_type,
-                            headers=response_headers
-                        )
-                except Exception as e:
-                    print(f"Streaming failed: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # 如果流式读取失败，尝试使用普通请求
-                    try:
-                        response = await client.get(video_url, headers=headers)
-                        print(f"Video stream response status: {response.status_code}")
-                        print(f"Response content length: {len(response.content)}")
-                        
-                        # 检查响应内容是否为空
-                        if not response.content:
-                            print("Response content is empty")
-                            raise HTTPException(
-                                status_code=500,
-                                detail="视频内容为空"
-                            )
-                        
-                        # 获取响应头中的Content-Type
-                        content_type = response.headers.get('content-type', 'video/mp4')
-                        
-                        # 构建响应头
-                        response_headers = {
-                            'Access-Control-Allow-Origin': '*',
-                            'Content-Disposition': f'attachment; filename="{platform}_video.mp4"',
-                            'Content-Length': str(len(response.content))
-                        }
-                        
-                        async def stream_content():
-                            yield response.content
-                        
-                        # 返回视频流
-                        return StreamingResponse(
-                            content=stream_content(),
-                            media_type=content_type,
-                            headers=response_headers
-                        )
-                    except Exception as e:
-                        print(f"Failed to get video content: {e}")
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"无法获取视频内容: {str(e)}"
-                        )
-        else:
-            async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                # 使用流式读取来避免内存问题
-                try:
-                    async with client.stream('GET', video_url, headers=headers) as response:
-                        # 检查响应状态码
-                        print(f"Video stream response status: {response.status_code}")
-                        print(f"Response headers: {dict(response.headers)}")
-                        
-                        if response.status_code != 200:
-                            print(f"Video stream request failed with status: {response.status_code}")
-                            # 确保使用标准的HTTP状态码
-                            if response.status_code < 100 or response.status_code >= 600:
-                                status_code = 500
-                            else:
-                                status_code = response.status_code
-                            raise HTTPException(
-                                status_code=status_code,
-                                detail=f"视频流请求失败: {response.status_code}"
-                            )
-                        
-                        # 获取响应头中的Content-Type
-                        content_type = response.headers.get('content-type', 'video/mp4')
-                        print(f"Content-Type from response: {content_type}")
-                        
-                        # 构建响应头
-                        response_headers = {
-                            'Access-Control-Allow-Origin': '*',
-                            'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
-                        }
-                        
-                        async def stream_content():
-                            total_bytes = 0
-                            chunk_count = 0
-                            has_data = False
-                            try:
-                                # 直接读取所有chunk
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    if chunk:
-                                        has_data = True
-                                        total_bytes += len(chunk)
-                                        chunk_count += 1
-                                        if chunk_count == 1:
-                                            print(f"Yielded first chunk, size: {len(chunk)}")
-                                        elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                        yield chunk
-                                
-                                if not has_data:
-                                    print("No data received from server")
-                                    # 如果没有数据，抛出异常
-                                    raise HTTPException(
-                                        status_code=500,
-                                        detail="视频内容为空"
-                                    )
-                                
-                                print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
-                            except httpx.StreamClosed as e:
-                                print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
-                                # 继续完成流，不要中断
-                            except Exception as e:
-                                print(f"Error reading stream: {e}")
-                                import traceback
-                                traceback.print_exc()
-                                # 尝试继续，不要因为错误中断整个流程
-                        
-                        # 返回视频流
-                        return StreamingResponse(
-                            content=stream_content(),
-                            media_type=content_type,
-                            headers=response_headers
-                        )
-                except Exception as e:
-                    print(f"Streaming failed: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # 如果流式读取失败，尝试使用普通请求
-                    try:
-                        response = await client.get(video_url, headers=headers)
-                        print(f"Video stream response status: {response.status_code}")
-                        print(f"Response content length: {len(response.content)}")
-                        
-                        # 检查响应内容是否为空
-                        if not response.content:
-                            print("Response content is empty")
-                            raise HTTPException(
-                                status_code=500,
-                                detail="视频内容为空"
-                            )
-                        
-                        # 获取响应头中的Content-Type
-                        content_type = response.headers.get('content-type', 'video/mp4')
-                        
-                        # 构建响应头
-                        response_headers = {
-                            'Access-Control-Allow-Origin': '*',
-                            'Content-Disposition': f'attachment; filename="{platform}_video.mp4"',
-                            'Content-Length': str(len(response.content))
-                        }
-                        
-                        async def stream_content():
-                            yield response.content
-                        
-                        # 返回视频流
-                        return StreamingResponse(
-                            content=stream_content(),
-                            media_type=content_type,
-                            headers=response_headers
-                        )
-                    except Exception as e:
-                        print(f"Failed to get video content: {e}")
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"无法获取视频内容: {str(e)}"
-                        )
+        async def process_response(response, platform_name):
+            # 检查响应状态码
+            print(f"Video stream response status: {response.status_code}")
+            print(f"Response headers: {dict(response.headers)}")
             
+            if response.status_code not in [200, 206]:
+                print(f"Video stream request failed with status: {response.status_code}")
+                # 确保使用标准的HTTP状态码
+                if response.status_code < 100 or response.status_code >= 600:
+                    status_code = 500
+                else:
+                    status_code = response.status_code
+                raise HTTPException(
+                    status_code=status_code,
+                    detail=f"视频流请求失败: {response.status_code}"
+                )
+            
+            # 获取响应头中的Content-Type
+            content_type = response.headers.get('content-type', 'video/mp4')
+            print(f"Content-Type from response: {content_type}")
+            
+            # 构建响应头
+            response_headers = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Origin, Range, Content-Type',
+                'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+                'Content-Disposition': f'attachment; filename="{platform_name}_video.mp4"'
+            }
+            
+            # 复制原始响应头中的相关字段
+            if 'content-length' in response.headers:
+                response_headers['Content-Length'] = response.headers['content-length']
+            if 'content-range' in response.headers:
+                response_headers['Content-Range'] = response.headers['content-range']
+            if 'accept-ranges' in response.headers:
+                response_headers['Accept-Ranges'] = response.headers['accept-ranges']
+            
+            async def stream_content():
+                total_bytes = 0
+                chunk_count = 0
+                has_data = False
+                try:
+                    # 直接读取所有chunk
+                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                        if chunk:
+                            has_data = True
+                            total_bytes += len(chunk)
+                            chunk_count += 1
+                            if chunk_count == 1:
+                                print(f"Yielded first chunk, size: {len(chunk)}")
+                            elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
+                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
+                            yield chunk
+                    
+                    if not has_data:
+                        print("No data received from server")
+                        # 如果没有数据，抛出异常
+                        raise HTTPException(
+                            status_code=500,
+                            detail="视频内容为空"
+                        )
+                    
+                    print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
+                except httpx.StreamClosed as e:
+                    print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
+                    # 继续完成流，不要中断
+                except Exception as e:
+                    print(f"Error reading stream: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # 尝试继续，不要因为错误中断整个流程
+            
+            print("Starting to stream video content")
+            return StreamingResponse(
+                content=stream_content(),
+                media_type=content_type,
+                headers=response_headers,
+                status_code=response.status_code
+            )
+        
+        async def process_non_streaming_response(response, platform_name):
+            print(f"Video response status: {response.status_code}")
+            print(f"Response content length: {len(response.content)}")
+            
+            # 检查响应状态码
+            if response.status_code not in [200, 206]:
+                print(f"Video request failed with status: {response.status_code}")
+                # 确保使用标准的HTTP状态码
+                if response.status_code < 100 or response.status_code >= 600:
+                    status_code = 500
+                else:
+                    status_code = response.status_code
+                raise HTTPException(
+                    status_code=status_code,
+                    detail=f"视频请求失败: {response.status_code}"
+                )
+            
+            # 检查响应内容是否为空
+            if not response.content:
+                print("Response content is empty")
+                raise HTTPException(
+                    status_code=500,
+                    detail="视频内容为空"
+                )
+            
+            # 获取响应头中的Content-Type
+            content_type = response.headers.get('content-type', 'video/mp4')
+            
+            # 构建响应头
+            response_headers = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Origin, Range, Content-Type',
+                'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+                'Content-Disposition': f'attachment; filename="{platform_name}_video.mp4"',
+                'Content-Length': str(len(response.content))
+            }
+            
+            # 复制原始响应头中的相关字段
+            if 'content-range' in response.headers:
+                response_headers['Content-Range'] = response.headers['content-range']
+            if 'accept-ranges' in response.headers:
+                response_headers['Accept-Ranges'] = response.headers['accept-ranges']
+            
+            async def stream_content():
+                yield response.content
+            
+            print("Returning video content as bytes")
+            return StreamingResponse(
+                content=stream_content(),
+                media_type=content_type,
+                headers=response_headers,
+                status_code=response.status_code
+            )
+        
+        # 处理视频请求
+        # 对于B站视频，如果需要音频且需要合并，使用专门的合并函数
+        if platform == 'bilibili' and with_audio and merge:
+            print("Processing Bilibili video with audio merge")
+            # 从请求中获取音频URL（如果有）
+            audio_url = request.query_params.get('audio_url')
+            print(f"Audio URL from params: {audio_url}")
+            
+            if not audio_url:
+                print("No audio URL provided, cannot merge video and audio")
+                # 如果没有音频URL，回退到普通处理
+                return await handle_video_request(video_url, platform)
+            
+            # 创建临时文件来存储合并后的视频
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_output:
+                output_path = temp_output.name
+            
+            print(f"Created temporary output file: {output_path}")
+            
+            try:
+                # 使用合并函数处理视频和音频
+                success = await merge_bilibili_video_audio(video_url, audio_url, request, output_path, headers)
+                print(f"Merge operation result: {success}")
+                
+                if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    print(f"Merge successful, output size: {os.path.getsize(output_path)} bytes")
+                    # 读取合并后的视频文件并返回
+                    async def stream_merged_content():
+                        async with aiofiles.open(output_path, 'rb') as f:
+                            chunk = await f.read(8192)
+                            while chunk:
+                                yield chunk
+                                chunk = await f.read(8192)
+                    
+                    # 构建响应头
+                    response_headers = {
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Origin, Range, Content-Type',
+                        'Access-Control-Expose-Headers': 'Content-Length',
+                        'Content-Disposition': f'attachment; filename="bilibili_video_merged.mp4"',
+                        'Content-Length': str(os.path.getsize(output_path))
+                    }
+                    
+                    print("Returning merged video content")
+                    return StreamingResponse(
+                        content=stream_merged_content(),
+                        media_type='video/mp4',
+                        headers=response_headers
+                    )
+                else:
+                    print("Merge failed, falling back to original video")
+                    # 如果合并失败，回退到普通处理
+                    return await handle_video_request(video_url, platform)
+            finally:
+                # 清理临时文件
+                if os.path.exists(output_path):
+                    try:
+                        os.unlink(output_path)
+                        print(f"Cleaned up temporary file: {output_path}")
+                    except Exception as e:
+                        print(f"Failed to clean up temporary file: {e}")
+        else:
+            # 其他情况，使用普通处理
+            return await handle_video_request(video_url, platform)
+        
     except httpx.HTTPStatusError as e:
         # 确保使用标准的HTTP状态码
         status_code = e.response.status_code
