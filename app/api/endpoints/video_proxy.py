@@ -108,13 +108,72 @@ async def video_proxy(
                 video_pattern = r'(https://[^/]+/upgcxcode/[0-9a-f]+/[0-9a-f]+/[0-9]+)/([0-9]+)-1-([0-9]+)\.(m4v|m4s)(\?.*)?$'
                 video_match = re.search(video_pattern, video_url)
                 
+                # 尝试3: 直接复制视频流到输出文件，不进行合并（优先尝试，因为音频URL都返回403）
+                print("Trying direct copy of video stream first")
+                try:
+                    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                        response = await client.get(video_url, headers=headers)
+                        response.raise_for_status()
+                        
+                        # 保存视频流到临时文件
+                        async with aiofiles.open(output_temp_path, 'wb') as f:
+                            await f.write(response.content)
+                        
+                        if os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
+                            print(f"Successfully copied video stream directly: {output_temp_path}")
+                            print(f"File size: {os.path.getsize(output_temp_path)} bytes")
+                            # 返回视频流
+                            async def stream_merged_video():
+                                async with aiofiles.open(output_temp_path, 'rb') as f:
+                                    chunk = await f.read(8192)
+                                    while chunk:
+                                        yield chunk
+                                        chunk = await f.read(8192)
+                                
+                            return StreamingResponse(
+                                content=stream_merged_video(),
+                                media_type='video/mp4',
+                                headers={
+                                    'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
+                                }
+                            )
+                except Exception as e:
+                    print(f"Direct copy failed: {e}")
+                
                 if video_match:
                     base_url = video_match.group(1)
                     video_id = video_match.group(2)
                     query_params = video_match.group(5)
                     print(f"Extracted from stream URL: base_url={base_url}, video_id={video_id}")
                     
-                    # 尝试直接使用视频流的基础URL和参数，修改格式为音频格式
+                    # 尝试1: 直接使用视频流URL作为音频URL（某些情况下视频流可能包含音频）
+                    print("Trying video URL as audio URL (fallback)")
+                    try:
+                        success = await merge_bilibili_video_audio(video_url, video_url, request, output_temp_path, headers)
+                        print(f"Merge with video URL as audio returned: {success}")
+                        
+                        if success and os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
+                            print(f"Successfully merged with video URL as audio: {output_temp_path}")
+                            print(f"Merged file size: {os.path.getsize(output_temp_path)} bytes")
+                            # 返回合并后的视频
+                            async def stream_merged_video():
+                                async with aiofiles.open(output_temp_path, 'rb') as f:
+                                    chunk = await f.read(8192)
+                                    while chunk:
+                                        yield chunk
+                                        chunk = await f.read(8192)
+                                
+                            return StreamingResponse(
+                                content=stream_merged_video(),
+                                media_type='video/mp4',
+                                headers={
+                                    'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
+                                }
+                            )
+                    except Exception as e:
+                        print(f"Merge with video URL as audio failed: {e}")
+                    
+                    # 尝试2: 直接使用视频流的基础URL和参数，修改格式为音频格式
                     # 常见的音频格式代码
                     audio_formats = ['30280', '30216', '30232', '101', '10000']
                     audio_exts = ['m4s', 'm4a']
@@ -142,7 +201,7 @@ async def video_proxy(
                                             while chunk:
                                                 yield chunk
                                                 chunk = await f.read(8192)
-                                    
+                                        
                                     return StreamingResponse(
                                         content=stream_merged_video(),
                                         media_type='video/mp4',
@@ -156,21 +215,23 @@ async def video_proxy(
                 print("All audio URL attempts failed, returning video stream directly")
                 
                 # 如果合并失败或没有音频URL，返回原始视频流
+                print("Returning original video stream directly")
                 async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-                    response = await client.get(video_url, headers=headers)
-                    response.raise_for_status()
-                    
-                    async def stream_content():
-                        yield response.content
-                    
-                    return StreamingResponse(
-                        content=stream_content(),
-                        media_type='video/mp4',
-                        headers={
-                            'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
-                            'Content-Length': str(len(response.content))
-                        }
-                    )
+                    # 使用流式读取来避免内存问题
+                    async with client.stream('GET', video_url, headers=headers) as response:
+                        response.raise_for_status()
+                        
+                        async def stream_content():
+                            async for chunk in response.aiter_bytes(chunk_size=8192):
+                                yield chunk
+                        
+                        return StreamingResponse(
+                            content=stream_content(),
+                            media_type='video/mp4',
+                            headers={
+                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
+                            }
+                        )
                     
             finally:
                 # 清理临时文件
