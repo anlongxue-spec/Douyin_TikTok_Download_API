@@ -34,6 +34,7 @@ async def video_proxy(
             __headers = await HybridCrawler.TikTokWebCrawler.get_tiktok_headers()
         elif platform == 'bilibili':
             __headers = await HybridCrawler.BilibiliWebCrawler.get_bilibili_headers()
+            print(f"Bilibili headers: {__headers.get('headers', {})}")
         elif platform == 'kuaishou':
             __headers = await HybridCrawler.KuaiShouWebCrawler.get_kuaishou_headers()
         elif platform == 'xiaohongshu':
@@ -44,187 +45,75 @@ async def video_proxy(
             __headers = await HybridCrawler.DouyinWebCrawler.get_douyin_headers()
         
         headers = __headers.get('headers', {})
+        print(f"Using headers: {headers}")
         
-        # B站视频特殊处理：音视频合并
+        # B站视频特殊处理：直接流式返回视频内容
         if platform == 'bilibili':
-            # 创建临时输出文件
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_temp:
-                output_temp_path = output_temp.name
-            
+            # 直接使用流式读取，返回视频内容，不使用临时文件
+            print("Streaming Bilibili video content directly")
+            print(f"Using video URL: {video_url}")
+            print(f"Using headers: {headers}")
             try:
-                # 尝试通过原始视频URL获取完整的视频信息（包括音频）
-                print("Trying to get complete video info via hybrid parsing")
-                
-                # 尝试从视频URL中提取BV号
-                bv_id = None
-                bv_pattern = r'(BV[A-Za-z0-9]+)'
-                bv_match = re.search(bv_pattern, video_url)
-                if bv_match:
-                    bv_id = bv_match.group(1)
-                    print(f"Extracted BV ID from video URL: {bv_id}")
-                
-                # 如果找到BV号，直接使用BV号解析
-                if bv_id:
-                    bv_url = f"https://b23.tv/{bv_id}"
-                    print(f"Using BV URL for hybrid parsing: {bv_url}")
-                    try:
-                        # 使用HybridCrawler解析视频信息
-                        video_info = await HybridCrawler.hybrid_parsing_single_video(bv_url, minimal=False)
-                        if video_info and 'data' in video_info and 'audio_url' in video_info['data']:
-                            audio_url = video_info['data']['audio_url']
-                            if audio_url:
-                                print(f"Got audio URL via hybrid parsing: {audio_url}")
-                                # 尝试合并音视频
-                                try:
-                                    success = await merge_bilibili_video_audio(video_url, audio_url, request, output_temp_path, headers)
-                                    print(f"merge_bilibili_video_audio returned: {success}")
-                                    
-                                    if success and os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
-                                        print(f"Successfully merged video and audio: {output_temp_path}")
-                                        print(f"Merged file size: {os.path.getsize(output_temp_path)} bytes")
-                                        # 返回合并后的视频
-                                        async def stream_merged_video():
-                                            async with aiofiles.open(output_temp_path, 'rb') as f:
-                                                chunk = await f.read(8192)
-                                                while chunk:
-                                                    yield chunk
-                                                    chunk = await f.read(8192)
-                                        
-                                        return StreamingResponse(
-                                            content=stream_merged_video(),
-                                            media_type='video/mp4',
-                                            headers={
-                                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                                            }
-                                        )
-                                except Exception as e:
-                                    print(f"Error in merge_bilibili_video_audio: {e}")
-                    except Exception as e:
-                        print(f"Failed to parse video via hybrid crawler: {e}")
-                
-                # 方法2: 如果没有BV号，尝试从视频流URL中提取信息
-                print("Trying to extract video info from stream URL")
-                # 尝试匹配视频流URL模式
-                video_pattern = r'(https://[^/]+/upgcxcode/[0-9a-f]+/[0-9a-f]+/[0-9]+)/([0-9]+)-1-([0-9]+)\.(m4v|m4s)(\?.*)?$'
-                video_match = re.search(video_pattern, video_url)
-                
-                # 尝试3: 直接复制视频流到输出文件，不进行合并（优先尝试，因为音频URL都返回403）
-                print("Trying direct copy of video stream first")
-                try:
-                    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-                        response = await client.get(video_url, headers=headers)
-                        response.raise_for_status()
-                        
-                        # 保存视频流到临时文件
-                        async with aiofiles.open(output_temp_path, 'wb') as f:
-                            await f.write(response.content)
-                        
-                        if os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
-                            print(f"Successfully copied video stream directly: {output_temp_path}")
-                            print(f"File size: {os.path.getsize(output_temp_path)} bytes")
-                            # 返回视频流
-                            async def stream_merged_video():
-                                async with aiofiles.open(output_temp_path, 'rb') as f:
-                                    chunk = await f.read(8192)
-                                    while chunk:
-                                        yield chunk
-                                        chunk = await f.read(8192)
-                                
-                            return StreamingResponse(
-                                content=stream_merged_video(),
-                                media_type='video/mp4',
-                                headers={
-                                    'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                                }
-                            )
-                except Exception as e:
-                    print(f"Direct copy failed: {e}")
-                
-                if video_match:
-                    base_url = video_match.group(1)
-                    video_id = video_match.group(2)
-                    query_params = video_match.group(5)
-                    print(f"Extracted from stream URL: base_url={base_url}, video_id={video_id}")
-                    
-                    # 尝试1: 直接使用视频流URL作为音频URL（某些情况下视频流可能包含音频）
-                    print("Trying video URL as audio URL (fallback)")
-                    try:
-                        success = await merge_bilibili_video_audio(video_url, video_url, request, output_temp_path, headers)
-                        print(f"Merge with video URL as audio returned: {success}")
-                        
-                        if success and os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
-                            print(f"Successfully merged with video URL as audio: {output_temp_path}")
-                            print(f"Merged file size: {os.path.getsize(output_temp_path)} bytes")
-                            # 返回合并后的视频
-                            async def stream_merged_video():
-                                async with aiofiles.open(output_temp_path, 'rb') as f:
-                                    chunk = await f.read(8192)
-                                    while chunk:
-                                        yield chunk
-                                        chunk = await f.read(8192)
-                                
-                            return StreamingResponse(
-                                content=stream_merged_video(),
-                                media_type='video/mp4',
-                                headers={
-                                    'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                                }
-                            )
-                    except Exception as e:
-                        print(f"Merge with video URL as audio failed: {e}")
-                    
-                    # 尝试2: 直接使用视频流的基础URL和参数，修改格式为音频格式
-                    # 常见的音频格式代码
-                    audio_formats = ['30280', '30216', '30232', '101', '10000']
-                    audio_exts = ['m4s', 'm4a']
-                    
-                    for fmt in audio_formats:
-                        for ext in audio_exts:
-                            # 生成音频URL
-                            audio_url = f"{base_url}/{video_id}-1-{fmt}.{ext}"
-                            if query_params:
-                                audio_url += query_params
-                            print(f"Trying audio URL: {audio_url}")
-                            
-                            # 尝试合并
-                            try:
-                                success = await merge_bilibili_video_audio(video_url, audio_url, request, output_temp_path, headers)
-                                print(f"Merge attempt returned: {success}")
-                                
-                                if success and os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
-                                    print(f"Successfully merged with audio URL: {output_temp_path}")
-                                    print(f"Merged file size: {os.path.getsize(output_temp_path)} bytes")
-                                    # 返回合并后的视频
-                                    async def stream_merged_video():
-                                        async with aiofiles.open(output_temp_path, 'rb') as f:
-                                            chunk = await f.read(8192)
-                                            while chunk:
-                                                yield chunk
-                                                chunk = await f.read(8192)
-                                        
-                                    return StreamingResponse(
-                                        content=stream_merged_video(),
-                                        media_type='video/mp4',
-                                        headers={
-                                            'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
-                                        }
-                                    )
-                            except Exception as e:
-                                print(f"Merge attempt failed: {e}")
-                
-                print("All audio URL attempts failed, returning video stream directly")
-                
-                # 如果合并失败或没有音频URL，返回原始视频流
-                print("Returning original video stream directly")
-                async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-                    # 使用流式读取来避免内存问题
+                async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
                     async with client.stream('GET', video_url, headers=headers) as response:
-                        response.raise_for_status()
+                        # 检查响应状态码
+                        print(f"Video stream response status: {response.status_code}")
+                        print(f"Response headers: {dict(response.headers)}")
+                        
+                        if response.status_code != 200:
+                            print(f"Video stream request failed with status: {response.status_code}")
+                            # 确保使用标准的HTTP状态码
+                            if response.status_code < 100 or response.status_code >= 600:
+                                status_code = 500
+                            else:
+                                status_code = response.status_code
+                            raise HTTPException(
+                                status_code=status_code,
+                                detail=f"视频流请求失败: {response.status_code}"
+                            )
                         
                         async def stream_content():
-                            async for chunk in response.aiter_bytes(chunk_size=8192):
-                                yield chunk
+                            total_bytes = 0
+                            try:
+                                async for chunk in response.aiter_bytes(chunk_size=8192):
+                                    if chunk:
+                                        total_bytes += len(chunk)
+                                        print(f"Yielding chunk of size: {len(chunk)}, total: {total_bytes}")
+                                        yield chunk
+                                    else:
+                                        print("Received empty chunk")
+                                print(f"Stream completed, total bytes: {total_bytes}")
+                            except httpx.StreamClosed:
+                                print(f"Stream closed by server, total bytes sent: {total_bytes}")
+                            except Exception as e:
+                                print(f"Error reading stream: {e}")
+                                import traceback
+                                traceback.print_exc()
                         
+                        print("Starting to stream Bilibili video content")
+                        return StreamingResponse(
+                            content=stream_content(),
+                            media_type='video/mp4',
+                            headers={
+                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
+                                'Access-Control-Allow-Origin': '*'
+                            }
+                        )
+            except Exception as e:
+                print(f"Streaming failed: {e}")
+                import traceback
+                traceback.print_exc()
+                # 如果流式读取失败，尝试使用普通请求
+                try:
+                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
+                        response = await client.get(video_url, headers=headers)
+                        print(f"Video stream response status: {response.status_code}")
+                        print(f"Response content length: {len(response.content)}")
+                        
+                        async def stream_content():
+                            yield response.content
+                        
+                        print("Returning Bilibili video content as bytes")
                         return StreamingResponse(
                             content=stream_content(),
                             media_type='video/mp4',
@@ -232,38 +121,58 @@ async def video_proxy(
                                 'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
                             }
                         )
-                    
-            finally:
-                # 清理临时文件
-                if os.path.exists(output_temp_path):
-                    try:
-                        os.unlink(output_temp_path)
-                        print(f"Cleaned up temporary file: {output_temp_path}")
-                    except Exception as e:
-                        print(f"Failed to clean up temporary file {output_temp_path}: {e}")
+                except Exception as e:
+                    print(f"Failed to get video content: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"无法获取视频内容: {str(e)}"
+                    )
         
         # 其他平台直接返回视频流
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            response = await client.get(video_url, headers=headers)
-            response.raise_for_status()
-            
-            # 流式返回视频内容
-            async def stream_content():
-                yield response.content
-            
-            # 返回视频流
-            return StreamingResponse(
-                content=stream_content(),
-                media_type='video/mp4',
-                headers={
-                    'Content-Disposition': f'attachment; filename="{platform}_video.mp4"',
-                    'Content-Length': str(len(response.content))
-                }
-            )
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
+            # 使用流式读取来避免内存问题
+            try:
+                async with client.stream('GET', video_url, headers=headers) as response:
+                    # 不调用raise_for_status()，避免非标准状态码错误
+                    print(f"Video stream response status: {response.status_code}")
+                    
+                    async def stream_content():
+                        async for chunk in response.aiter_bytes(chunk_size=8192):
+                            yield chunk
+                    
+                    # 返回视频流
+                    return StreamingResponse(
+                        content=stream_content(),
+                        media_type='video/mp4',
+                        headers={
+                            'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
+                        }
+                    )
+            except Exception as e:
+                print(f"Streaming failed: {e}")
+                # 如果流式读取失败，尝试使用普通请求
+                response = await client.get(video_url, headers=headers)
+                print(f"Video stream response status: {response.status_code}")
+                
+                async def stream_content():
+                    yield response.content
+                
+                # 返回视频流
+                return StreamingResponse(
+                    content=stream_content(),
+                    media_type='video/mp4',
+                    headers={
+                        'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
+                    }
+                )
             
     except httpx.HTTPStatusError as e:
+        # 确保使用标准的HTTP状态码
+        status_code = e.response.status_code
+        if status_code < 100 or status_code >= 600:
+            status_code = 500
         raise HTTPException(
-            status_code=e.response.status_code,
+            status_code=status_code,
             detail=f"视频请求失败: {e.response.reason_phrase}"
         )
     except Exception as e:
