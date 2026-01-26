@@ -203,84 +203,31 @@ async def video_proxy(
                                 'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
                             }
                             
-                            # 先尝试读取第一个chunk，确保有数据可用
-                            first_chunk = None
-                            try:
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    first_chunk = chunk
-                                    break
-                            except Exception as e:
-                                print(f"Error reading first chunk: {e}")
-                            
-                            # 检查是否有数据
-                            if not first_chunk:
-                                print("No data received from server, falling back to non-streaming request")
-                                # 如果没有数据，尝试使用普通请求
+                            async def stream_content():
+                                total_bytes = 0
+                                chunk_count = 0
+                                has_data = False
                                 try:
-                                    # 重新创建client获取完整内容
-                                    if proxies:
-                                        async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
-                                            response = await client.get(video_url, headers=headers)
-                                    else:
-                                        async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                                            response = await client.get(video_url, headers=headers)
+                                    # 直接读取所有chunk
+                                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                                        if chunk:
+                                            has_data = True
+                                            total_bytes += len(chunk)
+                                            chunk_count += 1
+                                            if chunk_count == 1:
+                                                print(f"Yielded first chunk, size: {len(chunk)}")
+                                            elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
+                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
+                                            yield chunk
                                     
-                                    print(f"Non-streaming response status: {response.status_code}")
-                                    print(f"Non-streaming content length: {len(response.content)}")
-                                    
-                                    if not response.content:
-                                        print("Non-streaming response content is empty")
+                                    if not has_data:
+                                        print("No data received from server")
+                                        # 如果没有数据，抛出异常
                                         raise HTTPException(
                                             status_code=500,
                                             detail="视频内容为空"
                                         )
                                     
-                                    # 构建响应头
-                                    non_streaming_headers = {
-                                        'Access-Control-Allow-Origin': '*',
-                                        'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
-                                        'Content-Length': str(len(response.content))
-                                    }
-                                    
-                                    async def stream_content():
-                                        yield response.content
-                                    
-                                    print("Returning Bilibili video content as bytes")
-                                    return StreamingResponse(
-                                        content=stream_content(),
-                                        media_type=content_type,
-                                        headers=non_streaming_headers
-                                    )
-                                except Exception as e:
-                                    print(f"Non-streaming fallback failed: {e}")
-                                    raise HTTPException(
-                                        status_code=500,
-                                        detail="无法获取视频内容"
-                                    )
-                            
-                            # 如果有数据，继续使用流式传输
-                            # 注意：不再添加Content-Length头，避免"Too little data"错误
-                            print("First chunk received, using streaming transfer")
-                            
-                            async def stream_content():
-                                total_bytes = 0
-                                chunk_count = 0
-                                try:
-                                    # 先发送第一个chunk
-                                    if first_chunk:
-                                        total_bytes += len(first_chunk)
-                                        chunk_count += 1
-                                        print(f"Yielded first chunk, size: {len(first_chunk)}")
-                                        yield first_chunk
-                                    
-                                    # 继续读取剩余的chunk
-                                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                                        if chunk:
-                                            total_bytes += len(chunk)
-                                            chunk_count += 1
-                                            if chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                            yield chunk
                                     print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
                                 except httpx.StreamClosed as e:
                                     print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
@@ -326,80 +273,31 @@ async def video_proxy(
                                 'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
                             }
                             
-                            # 先尝试读取第一个chunk，确保有数据可用
-                            first_chunk = None
-                            try:
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    first_chunk = chunk
-                                    break
-                            except Exception as e:
-                                print(f"Error reading first chunk: {e}")
-                            
-                            # 检查是否有数据
-                            if not first_chunk:
-                                print("No data received from server, falling back to non-streaming request")
-                                # 如果没有数据，尝试使用普通请求
+                            async def stream_content():
+                                total_bytes = 0
+                                chunk_count = 0
+                                has_data = False
                                 try:
-                                    # 重新创建client获取完整内容
-                                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                                        response = await client.get(video_url, headers=headers)
+                                    # 直接读取所有chunk
+                                    async for chunk in response.aiter_bytes(chunk_size=8192):
+                                        if chunk:
+                                            has_data = True
+                                            total_bytes += len(chunk)
+                                            chunk_count += 1
+                                            if chunk_count == 1:
+                                                print(f"Yielded first chunk, size: {len(chunk)}")
+                                            elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
+                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
+                                            yield chunk
                                     
-                                    print(f"Non-streaming response status: {response.status_code}")
-                                    print(f"Non-streaming content length: {len(response.content)}")
-                                    
-                                    if not response.content:
-                                        print("Non-streaming response content is empty")
+                                    if not has_data:
+                                        print("No data received from server")
+                                        # 如果没有数据，抛出异常
                                         raise HTTPException(
                                             status_code=500,
                                             detail="视频内容为空"
                                         )
                                     
-                                    # 构建响应头
-                                    non_streaming_headers = {
-                                        'Access-Control-Allow-Origin': '*',
-                                        'Content-Disposition': f'attachment; filename="bilibili_video.mp4"',
-                                        'Content-Length': str(len(response.content))
-                                    }
-                                    
-                                    async def stream_content():
-                                        yield response.content
-                                    
-                                    print("Returning Bilibili video content as bytes")
-                                    return StreamingResponse(
-                                        content=stream_content(),
-                                        media_type=content_type,
-                                        headers=non_streaming_headers
-                                    )
-                                except Exception as e:
-                                    print(f"Non-streaming fallback failed: {e}")
-                                    raise HTTPException(
-                                        status_code=500,
-                                        detail="无法获取视频内容"
-                                    )
-                            
-                            # 如果有数据，继续使用流式传输
-                            # 注意：不再添加Content-Length头，避免"Too little data"错误
-                            print("First chunk received, using streaming transfer")
-                            
-                            async def stream_content():
-                                total_bytes = 0
-                                chunk_count = 0
-                                try:
-                                    # 先发送第一个chunk
-                                    if first_chunk:
-                                        total_bytes += len(first_chunk)
-                                        chunk_count += 1
-                                        print(f"Yielded first chunk, size: {len(first_chunk)}")
-                                        yield first_chunk
-                                    
-                                    # 继续读取剩余的chunk
-                                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                                        if chunk:
-                                            total_bytes += len(chunk)
-                                            chunk_count += 1
-                                            if chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                                print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                            yield chunk
                                     print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
                                 except httpx.StreamClosed as e:
                                     print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
@@ -530,84 +428,31 @@ async def video_proxy(
                             'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
                         }
                         
-                        # 先尝试读取第一个chunk，确保有数据可用
-                        first_chunk = None
-                        try:
-                            async for chunk in response.aiter_bytes(chunk_size=8192):
-                                first_chunk = chunk
-                                break
-                        except Exception as e:
-                            print(f"Error reading first chunk: {e}")
-                        
-                        # 检查是否有数据
-                        if not first_chunk:
-                            print("No data received from server, falling back to non-streaming request")
-                            # 如果没有数据，尝试使用普通请求
+                        async def stream_content():
+                            total_bytes = 0
+                            chunk_count = 0
+                            has_data = False
                             try:
-                                # 重新创建client获取完整内容
-                                if proxies:
-                                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False, proxies=proxies) as client:
-                                        response = await client.get(video_url, headers=headers)
-                                else:
-                                    async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                                        response = await client.get(video_url, headers=headers)
+                                # 直接读取所有chunk
+                                async for chunk in response.aiter_bytes(chunk_size=8192):
+                                    if chunk:
+                                        has_data = True
+                                        total_bytes += len(chunk)
+                                        chunk_count += 1
+                                        if chunk_count == 1:
+                                            print(f"Yielded first chunk, size: {len(chunk)}")
+                                        elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
+                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
+                                        yield chunk
                                 
-                                print(f"Non-streaming response status: {response.status_code}")
-                                print(f"Non-streaming content length: {len(response.content)}")
-                                
-                                if not response.content:
-                                    print("Non-streaming response content is empty")
+                                if not has_data:
+                                    print("No data received from server")
+                                    # 如果没有数据，抛出异常
                                     raise HTTPException(
                                         status_code=500,
                                         detail="视频内容为空"
                                     )
                                 
-                                # 构建响应头
-                                non_streaming_headers = {
-                                    'Access-Control-Allow-Origin': '*',
-                                    'Content-Disposition': f'attachment; filename="{platform}_video.mp4"',
-                                    'Content-Length': str(len(response.content))
-                                }
-                                
-                                async def stream_content():
-                                    yield response.content
-                                
-                                print(f"Returning {platform} video content as bytes")
-                                return StreamingResponse(
-                                    content=stream_content(),
-                                    media_type=content_type,
-                                    headers=non_streaming_headers
-                                )
-                            except Exception as e:
-                                print(f"Non-streaming fallback failed: {e}")
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail="无法获取视频内容"
-                                )
-                        
-                        # 如果有数据，继续使用流式传输
-                        # 注意：不再添加Content-Length头，避免"Too little data"错误
-                        print("First chunk received, using streaming transfer")
-                        
-                        async def stream_content():
-                            total_bytes = 0
-                            chunk_count = 0
-                            try:
-                                # 先发送第一个chunk
-                                if first_chunk:
-                                    total_bytes += len(first_chunk)
-                                    chunk_count += 1
-                                    print(f"Yielded first chunk, size: {len(first_chunk)}")
-                                    yield first_chunk
-                                
-                                # 继续读取剩余的chunk
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    if chunk:
-                                        total_bytes += len(chunk)
-                                        chunk_count += 1
-                                        if chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                        yield chunk
                                 print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
                             except httpx.StreamClosed as e:
                                 print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
@@ -698,80 +543,31 @@ async def video_proxy(
                             'Content-Disposition': f'attachment; filename="{platform}_video.mp4"'
                         }
                         
-                        # 先尝试读取第一个chunk，确保有数据可用
-                        first_chunk = None
-                        try:
-                            async for chunk in response.aiter_bytes(chunk_size=8192):
-                                first_chunk = chunk
-                                break
-                        except Exception as e:
-                            print(f"Error reading first chunk: {e}")
-                        
-                        # 检查是否有数据
-                        if not first_chunk:
-                            print("No data received from server, falling back to non-streaming request")
-                            # 如果没有数据，尝试使用普通请求
+                        async def stream_content():
+                            total_bytes = 0
+                            chunk_count = 0
+                            has_data = False
                             try:
-                                # 重新创建client获取完整内容
-                                async with httpx.AsyncClient(timeout=60, follow_redirects=True, verify=False) as client:
-                                    response = await client.get(video_url, headers=headers)
+                                # 直接读取所有chunk
+                                async for chunk in response.aiter_bytes(chunk_size=8192):
+                                    if chunk:
+                                        has_data = True
+                                        total_bytes += len(chunk)
+                                        chunk_count += 1
+                                        if chunk_count == 1:
+                                            print(f"Yielded first chunk, size: {len(chunk)}")
+                                        elif chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
+                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
+                                        yield chunk
                                 
-                                print(f"Non-streaming response status: {response.status_code}")
-                                print(f"Non-streaming content length: {len(response.content)}")
-                                
-                                if not response.content:
-                                    print("Non-streaming response content is empty")
+                                if not has_data:
+                                    print("No data received from server")
+                                    # 如果没有数据，抛出异常
                                     raise HTTPException(
                                         status_code=500,
                                         detail="视频内容为空"
                                     )
                                 
-                                # 构建响应头
-                                non_streaming_headers = {
-                                    'Access-Control-Allow-Origin': '*',
-                                    'Content-Disposition': f'attachment; filename="{platform}_video.mp4"',
-                                    'Content-Length': str(len(response.content))
-                                }
-                                
-                                async def stream_content():
-                                    yield response.content
-                                
-                                print(f"Returning {platform} video content as bytes")
-                                return StreamingResponse(
-                                    content=stream_content(),
-                                    media_type=content_type,
-                                    headers=non_streaming_headers
-                                )
-                            except Exception as e:
-                                print(f"Non-streaming fallback failed: {e}")
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail="无法获取视频内容"
-                                )
-                        
-                        # 如果有数据，继续使用流式传输
-                        # 注意：不再添加Content-Length头，避免"Too little data"错误
-                        print("First chunk received, using streaming transfer")
-                        
-                        async def stream_content():
-                            total_bytes = 0
-                            chunk_count = 0
-                            try:
-                                # 先发送第一个chunk
-                                if first_chunk:
-                                    total_bytes += len(first_chunk)
-                                    chunk_count += 1
-                                    print(f"Yielded first chunk, size: {len(first_chunk)}")
-                                    yield first_chunk
-                                
-                                # 继续读取剩余的chunk
-                                async for chunk in response.aiter_bytes(chunk_size=8192):
-                                    if chunk:
-                                        total_bytes += len(chunk)
-                                        chunk_count += 1
-                                        if chunk_count % 10 == 0:  # 每10个chunk打印一次，避免日志过多
-                                            print(f"Yielded {chunk_count} chunks, total bytes: {total_bytes}")
-                                        yield chunk
                                 print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
                             except httpx.StreamClosed as e:
                                 print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
