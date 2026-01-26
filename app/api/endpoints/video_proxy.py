@@ -91,33 +91,44 @@ async def video_proxy(
                         # B站音频流URL格式: https://upos-sz-xxxx.bilivideo.com/upgcxcode/xx/xx/xxxxxx/xxxxxx-1-30216.m4a?e=...
                         
                         # 尝试匹配视频流URL模式
-                        video_pattern = r'(https://upos-sz-[^/]+/upgcxcode/[0-9a-f]+/[0-9a-f]+/[0-9]+)/[0-9]+-1-(30232|30280|30216)\.m4v(\?.*)?$'
+                        # 支持多种B站CDN域名和文件格式
+                        video_pattern = r'(https://[^/]+/upgcxcode/[0-9a-f]+/[0-9a-f]+/[0-9]+)/([0-9]+)-1-([0-9]+)\.(m4v|m4s)(\?.*)?$'
                         video_match = re.search(video_pattern, video_url)
                         
                         if video_match:
                             base_url = video_match.group(1)
-                            print(f"Extracted base URL: {base_url}")
+                            video_id = video_match.group(2)
+                            video_format = video_match.group(3)
+                            video_ext = video_match.group(4)
+                            query_params = video_match.group(5)
+                            print(f"Extracted: base_url={base_url}, video_id={video_id}, format={video_format}, ext={video_ext}")
                             
-                            # 尝试常见的音频格式代码
-                            audio_formats = ['30216', '30232', '30280']
-                            for fmt in audio_formats:
-                                # 生成音频URL
-                                audio_url_candidate = f"{base_url}/{base_url.split('/')[-1]}-1-{fmt}.m4a"
-                                # 如果视频URL有查询参数，也添加到音频URL
-                                if video_match.group(3):
-                                    audio_url_candidate += video_match.group(3)
-                                print(f"Generated audio URL candidate: {audio_url_candidate}")
-                                
-                                # 验证音频URL是否有效
-                                try:
-                                    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                                        response = await client.head(audio_url_candidate, headers=headers)
-                                        if response.status_code == 200:
-                                            audio_url = audio_url_candidate
-                                            print(f"Found valid audio URL: {audio_url}")
-                                            break
-                                except Exception as e:
-                                    print(f"Failed to verify audio URL candidate: {e}")
+                            # 尝试常见的音频格式代码，先尝试标准音频格式，再尝试视频格式
+                            audio_formats = ['30216', '30032', '30080', video_format]
+                            audio_exts = ['m4a', 'm4s']
+                            
+                            # 组合所有可能的格式和扩展名
+                            for ext in audio_exts:
+                                for fmt in audio_formats:
+                                    # 生成音频URL
+                                    audio_url_candidate = f"{base_url}/{video_id}-1-{fmt}.{ext}"
+                                    # 如果视频URL有查询参数，也添加到音频URL
+                                    if query_params:
+                                        audio_url_candidate += query_params
+                                    print(f"Generated audio URL candidate: {audio_url_candidate}")
+                                    
+                                    # 验证音频URL是否有效
+                                    try:
+                                        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                                            response = await client.head(audio_url_candidate, headers=headers)
+                                            if response.status_code == 200:
+                                                audio_url = audio_url_candidate
+                                                print(f"Found valid audio URL: {audio_url}")
+                                                break
+                                    except Exception as e:
+                                        print(f"Failed to verify audio URL candidate: {e}")
+                                if audio_url:
+                                    break
                 except Exception as e:
                     print(f"Failed to get audio URL: {e}")
                     import traceback
