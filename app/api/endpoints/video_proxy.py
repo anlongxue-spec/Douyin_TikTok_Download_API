@@ -103,8 +103,8 @@ async def video_proxy(
                             query_params = video_match.group(5)
                             print(f"Extracted: base_url={base_url}, video_id={video_id}, format={video_format}, ext={video_ext}")
                             
-                            # 尝试常见的音频格式代码，先尝试标准音频格式，再尝试视频格式
-                            audio_formats = ['30216', '30032', '30080', video_format]
+                            # 尝试常见的音频格式代码，只尝试标准音频格式
+                            audio_formats = ['30216', '30232', '30280', '101']
                             audio_exts = ['m4a', 'm4s']
                             
                             # 组合所有可能的格式和扩展名
@@ -117,14 +117,41 @@ async def video_proxy(
                                         audio_url_candidate += query_params
                                     print(f"Generated audio URL candidate: {audio_url_candidate}")
                                     
-                                    # 验证音频URL是否有效
+                                    # 验证音频URL是否有效且确实是音频文件
                                     try:
                                         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                                            response = await client.head(audio_url_candidate, headers=headers)
-                                            if response.status_code == 200:
-                                                audio_url = audio_url_candidate
-                                                print(f"Found valid audio URL: {audio_url}")
-                                                break
+                                            # 先发送HEAD请求检查状态
+                                            head_response = await client.head(audio_url_candidate, headers=headers)
+                                            if head_response.status_code == 200:
+                                                # 检查Content-Type是否为音频
+                                                content_type = head_response.headers.get('Content-Type', '')
+                                                if 'audio' in content_type.lower():
+                                                    audio_url = audio_url_candidate
+                                                    print(f"Found valid audio URL with audio Content-Type: {audio_url}")
+                                                    break
+                                                else:
+                                                    # 即使不是音频Content-Type，也尝试下载一小部分验证
+                                                    print(f"Audio URL candidate has non-audio Content-Type: {content_type}")
+                                                    # 发送GET请求下载一小部分
+                                                    get_response = await client.get(audio_url_candidate, headers=headers, timeout=10)
+                                                    if get_response.status_code == 200:
+                                                        # 检查文件大小是否明显小于视频文件
+                                                        video_size = 0
+                                                        try:
+                                                            # 获取视频文件大小
+                                                            video_response = await client.head(video_url, headers=headers)
+                                                            video_size = int(video_response.headers.get('Content-Length', '0'))
+                                                        except:
+                                                            pass
+                                                        
+                                                        audio_size = int(head_response.headers.get('Content-Length', '0'))
+                                                        if video_size > 0 and audio_size < video_size * 0.5:  # 音频文件通常小于视频的50%
+                                                            audio_url = audio_url_candidate
+                                                            print(f"Found valid audio URL (size check passed): {audio_url}")
+                                                            print(f"Video size: {video_size}, Audio size: {audio_size}")
+                                                            break
+                                                        else:
+                                                            print(f"Audio URL candidate size ({audio_size}) is not significantly smaller than video size ({video_size})")
                                     except Exception as e:
                                         print(f"Failed to verify audio URL candidate: {e}")
                                 if audio_url:
