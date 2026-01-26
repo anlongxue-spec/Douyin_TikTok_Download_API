@@ -194,7 +194,54 @@ async def video_proxy(
                         import traceback
                         traceback.print_exc()
                 else:
-                    print("Audio URL not found, returning video stream directly")
+                    # 尝试直接使用视频流URL生成音频URL，不进行严格验证
+                    print("Trying direct audio URL generation without strict validation")
+                    if video_match:
+                        # 直接生成音频URL，使用相同的基础URL和参数
+                        base_url = video_match.group(1)
+                        video_id = video_match.group(2)
+                        query_params = video_match.group(5)
+                        
+                        # 尝试常见的音频格式
+                        audio_formats = ['30280', '30216', '30232']
+                        audio_exts = ['m4s', 'm4a']
+                        
+                        for fmt in audio_formats:
+                            for ext in audio_exts:
+                                # 生成音频URL
+                                direct_audio_url = f"{base_url}/{video_id}-1-{fmt}.{ext}"
+                                if query_params:
+                                    direct_audio_url += query_params
+                                print(f"Trying direct audio URL: {direct_audio_url}")
+                                
+                                # 直接尝试使用这个音频URL进行合并，不验证
+                                try:
+                                    print(f"Attempting merge with direct audio URL")
+                                    success = await merge_bilibili_video_audio(video_url, direct_audio_url, request, output_temp_path, headers)
+                                    print(f"Direct merge attempt returned: {success}")
+                                    
+                                    if success and os.path.exists(output_temp_path) and os.path.getsize(output_temp_path) > 0:
+                                        print(f"Successfully merged with direct audio URL: {output_temp_path}")
+                                        print(f"Merged file size: {os.path.getsize(output_temp_path)} bytes")
+                                        # 返回合并后的视频
+                                        async def stream_merged_video():
+                                            async with aiofiles.open(output_temp_path, 'rb') as f:
+                                                chunk = await f.read(8192)
+                                                while chunk:
+                                                    yield chunk
+                                                    chunk = await f.read(8192)
+                                        
+                                        return StreamingResponse(
+                                            content=stream_merged_video(),
+                                            media_type='video/mp4',
+                                            headers={
+                                                'Content-Disposition': f'attachment; filename="bilibili_video.mp4"'
+                                            }
+                                        )
+                                except Exception as e:
+                                    print(f"Direct merge attempt failed: {e}")
+                    
+                    print("All audio URL attempts failed, returning video stream directly")
                 
                 # 如果合并失败或没有音频URL，返回原始视频流
                 async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
