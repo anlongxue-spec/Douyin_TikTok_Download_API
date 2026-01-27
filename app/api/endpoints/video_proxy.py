@@ -274,21 +274,23 @@ async def video_proxy(
                     
                     if not has_data:
                         print("No data received from server")
-                        # 如果没有数据，抛出异常
-                        raise HTTPException(
-                            status_code=500,
-                            detail="视频内容为空"
-                        )
-                    
-                    print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
+                        # 如果没有数据，返回空数据而不是抛出异常
+                        # 这样可以避免"Too little data for declared Content-Length"错误
+                        yield b''
+                    else:
+                        print(f"Stream completed successfully, total bytes: {total_bytes}, total chunks: {chunk_count}")
                 except httpx.StreamClosed as e:
                     print(f"Stream closed by server, total bytes sent: {total_bytes}, chunks: {chunk_count}")
                     # 继续完成流，不要中断
+                    if not has_data:
+                        yield b''
                 except Exception as e:
                     print(f"Error reading stream: {e}")
                     import traceback
                     traceback.print_exc()
                     # 尝试继续，不要因为错误中断整个流程
+                    if not has_data:
+                        yield b''
             
             print("Starting to stream video content")
             return StreamingResponse(
