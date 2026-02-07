@@ -116,6 +116,13 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
     """
     下载并合并 Bilibili 的视频流和音频流
     """
+    print(f"\n===== STARTING BILIBILI VIDEO-AUDIO MERGE =====")
+    print(f"Video URL: {video_url}")
+    print(f"Audio URL: {audio_url}")
+    print(f"Output path: {output_path}")
+    print(f"Headers: {headers}")
+    print(f"=============================================")
+    
     try:
         # 创建临时文件
         with tempfile.NamedTemporaryFile(suffix='.m4v', delete=False) as video_temp:
@@ -454,7 +461,15 @@ async def merge_bilibili_video_audio(video_url: str, audio_url: str, request: Re
         print(f"Error merging video and audio: {e}")
         import traceback
         traceback.print_exc()
+        print(f"\n===== BILIBILI MERGE FAILED =====")
         return False
+    
+    print(f"\n===== BILIBILI MERGE COMPLETED =====")
+    print(f"Output path: {output_path}")
+    print(f"Output file exists: {os.path.exists(output_path)}")
+    if os.path.exists(output_path):
+        print(f"Output file size: {os.path.getsize(output_path)} bytes")
+    print(f"===================================")
 
 @router.get("/download", summary="在线下载抖音|TikTok|Bilibili视频/图片/Online download Douyin|TikTok|Bilibili video/image")
 async def download_file_hybrid(request: Request,

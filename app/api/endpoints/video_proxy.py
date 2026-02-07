@@ -91,10 +91,18 @@ async def video_proxy(
     platform: str = Query(...),
     with_audio: bool = Query(False),
     merge: bool = Query(False) ):
+    # 记录完整的请求信息
+    print(f"\n===== NEW VIDEO PROXY REQUEST =====")
+    print(f"Request URL: {request.url}")
+    print(f"Full query parameters: {dict(request.query_params)}")
     print(f"Received video proxy request for platform: {platform}")
     print(f"Video URL: {video_url}")
-    print(f"Request headers: {dict(request.headers)}")
     print(f"with_audio: {with_audio}, merge: {merge}")
+    # 特别记录audio_url参数
+    audio_url = request.query_params.get('audio_url')
+    print(f"Audio URL parameter: {audio_url}")
+    print(f"Request headers: {dict(request.headers)}")
+    print(f"===================================")
     """
     视频代理下载端点，避免浏览器直接访问第三方视频URL导致的跨域错误
     
